@@ -1,0 +1,168 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Nunito:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Nunito", sans-serif;
+  --font-mono: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --color-slate-850: rgba(255, 255, 255, 0.08);
+}
+
+/* Fade-in entrance transition used throughout the app (modals, tab panels, lists).
+   Defined manually since Tailwind v4 has no built-in "fadeIn" utility. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
+/* Hide number input spinner arrows */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.light .text-white {
+  color: #0f172a !important; /* slate-900 */
+}
+
+.light .text-blue-400 {
+  color: #2563eb !important; /* blue-600 */
+}
+
+.light .text-red-400 {
+  color: #dc2626 !important; /* red-600 */
+}
+
+.light .text-emerald-400 {
+  color: #16a34a !important; /* emerald-600 */
+}
+
+.light .text-teal-400 {
+  color: #0d9488 !important; /* teal-600 */
+}
+.light {
+  background-color: #f8fafc !important; /* slate-50 */
+  color: #0f172a !important; /* slate-900 */
+}
+
+.light ::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light header {
+  background-color: #ffffff !important;
+  border-color: #f1f5f9 !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02) !important;
+}
+
+.light .bg-slate-900 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03) !important;
+}
+
+.light .bg-slate-950 {
+  background-color: #f8fafc !important;
+  border-color: #f1f5f9 !important;
+}
+
+.light .bg-slate-950\/40 {
+  background-color: rgba(248, 250, 252, 0.9) !important;
+  border-color: #f1f5f9 !important;
+}
+
+.light .bg-slate-950\/20 {
+  background-color: rgba(241, 245, 249, 0.4) !important;
+  border-color: #f1f5f9 !important;
+}
+
+.light .bg-slate-950\/30 {
+  background-color: rgba(241, 245, 249, 0.6) !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light .bg-slate-850 {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+
+.border-slate-850 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.light .border-slate-850 {
+  border-color: #f1f5f9 !important;
+}
+
+.light .border-slate-900 {
+  border-color: #e2e8f0 !important;
+}
+
+.light .text-slate-100 {
+  color: #0f172a !important; /* slate-900 */
+}
+
+.light .text-slate-200 {
+  color: #1e293b !important; /* slate-800 */
+}
+
+.light .text-slate-300 {
+  color: #334155 !important; /* slate-700 */
+}
+
+.light .text-slate-400 {
+  color: #475569 !important; /* slate-600 */
+}
+
+.light .text-slate-500 {
+  color: #64748b !important; /* slate-500 */
+}
+
+.light select, .light input, .light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02) !important;
+}
+
+.light select:focus, .light input:focus, .light textarea:focus {
+  border-color: #3b82f6 !important; /* blue-500 highlight matching app accents */
+  box-shadow: 0 0 0 1px #3b82f6 !important;
+}
+
+.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light .pointer-events-none {
+  opacity: 0.3 !important;
+}

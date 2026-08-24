@@ -1,0 +1,21 @@
+# Supabase's free tier auto-pauses a project after 7 days with no API activity. This pings the
+# REST API on a schedule well inside that window, so the project (and this site's data) never
+# goes to sleep. Reuses the same VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY secrets deploy.yml
+# already has - no new secrets needed.
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Every 3 days - comfortably inside Supabase's 7-day inactivity window even if a run is delayed.
+    - cron: "0 3 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          curl -sf "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/matches?select=id&limit=1" \
+            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}"
