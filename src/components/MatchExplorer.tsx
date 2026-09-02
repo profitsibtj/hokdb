@@ -6,6 +6,10 @@ import {
 } from "lucide-react";
 import { LANE_ICON_URLS } from "../laneIcons";
 
+// How many match cards show before the list caps its height and scrolls internally instead of
+// pushing the rest of the page down indefinitely.
+const MATCH_LIST_VISIBLE_CAP = 25;
+
 // Best multi-kill a player got this game, HOK-broadcast style (only the highest is shown, not
 // every tier they hit along the way) - undefined if they didn't get at least a double kill.
 const bestMultiKillLabel = (p: Game["teamAPlayers"][number]): string | null => {
@@ -232,6 +236,32 @@ export const MatchExplorer: React.FC<MatchExplorerProps> = ({
     });
   }, [matches, searchTerm, selectedLeague]);
 
+  // Caps the list at MATCH_LIST_VISIBLE_CAP cards tall before it scrolls internally, instead of
+  // growing the whole page forever as more matches get logged - measured off the real Nth card's
+  // own rendered bottom edge (not a guessed pixel height) so it stays exact regardless of how tall
+  // a collapsed vs expanded card actually is. Recomputes when a card above the cutoff expands/
+  // collapses, since that changes where the cutoff card's bottom edge actually lands.
+  const listContainerRef = React.useRef<HTMLDivElement>(null);
+  const listItemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const [listMaxHeight, setListMaxHeight] = useState<number | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (filteredMatches.length <= MATCH_LIST_VISIBLE_CAP) {
+      setListMaxHeight(null);
+      return;
+    }
+    const recompute = () => {
+      const container = listContainerRef.current;
+      const cutoffItem = listItemRefs.current[MATCH_LIST_VISIBLE_CAP - 1];
+      if (!container || !cutoffItem) return;
+      const height = cutoffItem.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
+      setListMaxHeight(height);
+    };
+    recompute();
+    window.addEventListener("resize", recompute);
+    return () => window.removeEventListener("resize", recompute);
+  }, [filteredMatches.length, expandedMatch]);
+
   const toggleMatch = (id: string) => {
     setExpandedMatch((prev) => (prev === id ? null : id));
   };
@@ -292,8 +322,12 @@ export const MatchExplorer: React.FC<MatchExplorerProps> = ({
           No match records found.
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredMatches.map((m) => {
+        <div
+          ref={listContainerRef}
+          style={listMaxHeight ? { maxHeight: listMaxHeight, overflowY: "auto" } : undefined}
+          className="space-y-4 pr-1"
+        >
+          {filteredMatches.map((m, idx) => {
             const matchId = m.id || "";
             const isExpanded = expandedMatch === matchId;
             const isHighlighted = highlightedMatchId === matchId;
@@ -306,6 +340,7 @@ export const MatchExplorer: React.FC<MatchExplorerProps> = ({
               <div
                 key={matchId}
                 id={`match-${matchId}`}
+                ref={(el) => { listItemRefs.current[idx] = el; }}
                 className={`rounded-2xl overflow-hidden shadow-sm transition-all duration-200 ${
                   isHighlighted ? "ring-2 ring-blue-500" : ""
                 } ${

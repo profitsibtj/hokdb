@@ -5,6 +5,10 @@ import {
   Trash2, Edit2, Clock, Radio, CheckCircle2, Play, CalendarClock, RefreshCw, Flag, ClipboardList, History
 } from "lucide-react";
 
+// How many cards show before the list caps its height and scrolls internally instead of pushing
+// the rest of the page down indefinitely.
+const SCHEDULE_LIST_VISIBLE_CAP = 5;
+
 interface MatchScheduleProps {
   schedules: ScheduleEntry[];
   isLoading: boolean;
@@ -142,6 +146,30 @@ export const MatchSchedule: React.FC<MatchScheduleProps> = ({
   const visible = showFinished ? sorted : notFinished;
   const finishedCount = sorted.length - notFinished.length;
 
+  // Same idea as Match Explorer's own list cap - measured off the real 5th card's rendered bottom
+  // edge (not a guessed pixel height), so it stays exact regardless of the grid's own row wrapping
+  // (grid-cols-2 on desktop) or how tall an individual card happens to be.
+  const listContainerRef = React.useRef<HTMLDivElement>(null);
+  const listItemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const [listMaxHeight, setListMaxHeight] = useState<number | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (visible.length <= SCHEDULE_LIST_VISIBLE_CAP) {
+      setListMaxHeight(null);
+      return;
+    }
+    const recompute = () => {
+      const container = listContainerRef.current;
+      const cutoffItem = listItemRefs.current[SCHEDULE_LIST_VISIBLE_CAP - 1];
+      if (!container || !cutoffItem) return;
+      const height = cutoffItem.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
+      setListMaxHeight(height);
+    };
+    recompute();
+    window.addEventListener("resize", recompute);
+    return () => window.removeEventListener("resize", recompute);
+  }, [visible.length]);
+
   return (
     <div className="space-y-4 font-mono text-xs animate-fadeIn">
       <div className={`p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 transition-all ${
@@ -236,8 +264,12 @@ export const MatchSchedule: React.FC<MatchScheduleProps> = ({
           No matches scheduled yet.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {visible.map(({ entry: s, status, startMs }) => {
+        <div
+          ref={listContainerRef}
+          style={listMaxHeight ? { maxHeight: listMaxHeight, overflowY: "auto" } : undefined}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-3 pr-1"
+        >
+          {visible.map(({ entry: s, status, startMs }, idx) => {
             const start = new Date(startMs);
             const validStart = startMs > 0;
 
@@ -245,6 +277,7 @@ export const MatchSchedule: React.FC<MatchScheduleProps> = ({
 
             return (
               <div
+                ref={(el) => { listItemRefs.current[idx] = el; }}
                 key={s.id}
                 onClick={isViewable ? () => onViewMatch!(s) : undefined}
                 title={isViewable ? "Click to view this match's posted result" : undefined}

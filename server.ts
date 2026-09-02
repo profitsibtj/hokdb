@@ -3,136 +3,10 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { getSupabase } from "./src/supabaseClient.ts";
-import { Match, Game, MatchFormat } from "./src/types.ts";
-
-// Helper mappings for Supabase (snake_case columns to camelCase frontend)
-const mapMatchFromDb = (row: any): Match => {
-  return {
-    id: String(row.id),
-    league: row.league || "",
-    stage: row.stage || "",
-    format: row.format || "Bo1",
-    teamA: row.team_a || "",
-    teamB: row.team_b || "",
-    scoreA: row.score_a || 0,
-    scoreB: row.score_b || 0,
-    winner: row.winner || undefined,
-    scheduledAt: row.scheduled_at || "",
-    liveLink: row.live_link || "",
-    patch: row.patch || "",
-    isPlayoff: !!row.is_playoff,
-    isFinished: !!row.is_finished,
-    games: row.games || [],
-    createdAt: row.created_at || "",
-    updatedAt: row.updated_at || "",
-  };
-};
-
-const mapMatchToDb = (data: any) => {
-  return {
-    league: data.league || null,
-    stage: data.stage || null,
-    format: data.format || null,
-    team_a: data.teamA || null,
-    team_b: data.teamB || null,
-    score_a: data.scoreA || 0,
-    score_b: data.scoreB || 0,
-    winner: data.winner || null,
-    scheduled_at: data.scheduledAt || null,
-    live_link: data.liveLink || null,
-    patch: data.patch || null,
-    is_playoff: !!data.isPlayoff,
-    is_finished: !!data.isFinished,
-    games: data.games || [],
-  };
-};
-
-const mapRosterFromDb = (row: any) => {
-  if (!row) return null;
-  return {
-    id: String(row.id),
-    name: row.name || "",
-    position: row.position || "Clash Lane",
-    team: row.team || "",
-    league: row.league || "",
-    previousNames: row.previous_names || [],
-    realName: row.real_name || "",
-    createdAt: row.created_at || "",
-    updatedAt: row.updated_at || "",
-  };
-};
-
-const mapRosterToDb = (player: any) => {
-  return {
-    name: player.name || "",
-    position: player.position || null,
-    team: player.team || null,
-    league: player.league || null,
-    previous_names: player.previousNames || [],
-    real_name: player.realName || null,
-  };
-};
-
-const mapScheduleFromDb = (row: any) => {
-  if (!row) return null;
-  return {
-    id: String(row.id),
-    league: row.league || "",
-    matchCode: row.match_code || "",
-    teamA: row.team_a || "",
-    teamB: row.team_b || "",
-    format: row.format || "Bo1",
-    scheduledAt: row.scheduled_at || "",
-    liveLink: row.live_link || "",
-    isFinished: !!row.is_finished,
-    createdAt: row.created_at || "",
-  };
-};
-
-const mapScheduleToDb = (data: any) => {
-  return {
-    league: data.league || null,
-    match_code: data.matchCode || null,
-    team_a: data.teamA || null,
-    team_b: data.teamB || null,
-    format: data.format || null,
-    scheduled_at: data.scheduledAt || null,
-    live_link: data.liveLink || null,
-    is_finished: !!data.isFinished,
-  };
-};
-
-// League presets are stored as one row per league, with the whole preset (name, default format,
-// fearless draft toggle, team list, abbreviations) kept as a single jsonb blob - the shape is
-// defined and versioned entirely on the frontend.
-const mapLeaguePresetFromDb = (row: any) => {
-  if (!row) return null;
-  return { id: row.id, ...(row.data || {}) };
-};
-
-const REQUIRED_WINS: Record<string, number> = { Bo1: 1, Bo3: 2, Bo5: 3, Bo7: 4 };
-
-// Recomputes scoreA/scoreB/winner/isFinished from the nested games array on every save/read -
-// derived fields are never trusted from stale stored values, only from the games actually entered.
-const formatMatchData = (match: any): any => {
-  const games: Game[] = match.games || [];
-  const scoreA = games.filter((g) => g.winner === "A").length;
-  const scoreB = games.filter((g) => g.winner === "B").length;
-  const required = REQUIRED_WINS[match.format as MatchFormat] || 1;
-  let winner: string | undefined;
-  if (scoreA >= required) winner = match.teamA;
-  else if (scoreB >= required) winner = match.teamB;
-  return { ...match, games, scoreA, scoreB, winner, isFinished: !!winner };
-};
-
-// Sort matches by scheduled/created date, most recent first.
-const sortMatches = (matchList: any[]) => {
-  return [...matchList].sort((a, b) => {
-    const ad = a.scheduledAt || a.createdAt || "";
-    const bd = b.scheduledAt || b.createdAt || "";
-    return bd.localeCompare(ad);
-  });
-};
+import {
+  mapMatchFromDb, mapMatchToDb, mapRosterFromDb, mapRosterToDb,
+  mapScheduleFromDb, mapScheduleToDb, mapLeaguePresetFromDb, formatMatchData, sortMatches
+} from "./src/dbMappers.ts";
 
 dotenv.config();
 
@@ -207,7 +81,7 @@ app.post("/api/verify-action", (req, res) => {
 });
 
 // Match Endpoints
-app.get("/api/matches", checkAuth, async (req, res) => {
+app.get("/api/matches", checkAuth, async (_req, res) => {
   try {
     const { data: rawMatches, error } = await getSupabase().from("matches").select("*");
     if (error) {
@@ -272,7 +146,7 @@ app.delete("/api/matches/:id", checkAdminAuth, async (req, res) => {
 });
 
 // Roster Endpoints
-app.get("/api/roster", async (req, res) => {
+app.get("/api/roster", async (_req, res) => {
   try {
     const { data: rawRoster, error } = await getSupabase().from("roster").select("*");
     if (error) {
@@ -345,7 +219,7 @@ app.delete("/api/roster/:id", async (req, res) => {
 });
 
 // Schedule Endpoints
-app.get("/api/schedules", checkAuth, async (req, res) => {
+app.get("/api/schedules", checkAuth, async (_req, res) => {
   try {
     const { data: rawSchedules, error } = await getSupabase().from("schedules").select("*");
     if (error) {
@@ -408,7 +282,7 @@ app.delete("/api/schedules/:id", checkAdminAuth, async (req, res) => {
 // League Presets Endpoints (stored in the `tournaments` table, one row per league)
 // Reads are gated by the regular access password (every logged-in user needs the shared league
 // config); writes require the admin action password, same as matches/roster.
-app.get("/api/tournaments", checkAuth, async (req, res) => {
+app.get("/api/tournaments", checkAuth, async (_req, res) => {
   try {
     const { data: rawTournaments, error } = await getSupabase().from("tournaments").select("*").order("created_at", { ascending: true });
     if (error) {
@@ -468,7 +342,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { LeaguePreset, BracketPreset, Match, Side } from "../types";
 import {
   createBracket, createDoubleEliminationBracket, resolveBracketTeam, getBracketRoundLabel,
-  findMatchByTeams, deriveBracketView, deriveDoubleEliminationView, DoubleEliminationSlotView
+  findMatchByTeams, deriveBracketView, deriveDoubleEliminationView
 } from "../utils";
 import { Plus, Trash2, Crown, ExternalLink } from "lucide-react";
 

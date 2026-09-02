@@ -73,17 +73,15 @@ create or replace function reset_schedules_id_seq() returns void as $$
 begin
   perform setval(pg_get_serial_sequence('schedules', 'id'), coalesce((select max(id) from schedules), 0) + 1, false);
 end;
-$$ language plpgsql;
+$$ language plpgsql;`;
 
--- RLS disabled by default (simplest for getting started). If you'd rather keep it enabled, use
--- permissive policies instead:
--- alter table public.matches enable row level security;
--- create policy "public access matches" on public.matches for all using (true) with check (true);
--- (repeat for roster / schedules / tournaments)
-alter table public.matches disable row level security;
-alter table public.roster disable row level security;
-alter table public.schedules disable row level security;
-alter table public.tournaments disable row level security;`;
+// The RLS + password-gated-write migration (app_settings table, upsert_*/delete_*/sync_tournaments
+// functions) already ran directly against the live Supabase project and isn't repeated in the
+// in-app "Copy SQL Script" banner above anymore - dataClient.ts's writes call those functions by
+// name (e.g. .rpc("upsert_match", ...)), so they must still exist in the database for any save/
+// delete to work. If this project's Supabase database is ever recreated from scratch, that
+// migration needs to be reapplied by hand (ask for it again, or pull it from an earlier chat/
+// commit) before SUPABASE_SETUP_SQL above alone is enough to make the app fully work again.
 
 const LEAGUE_PRESETS_KEY = "hok_league_presets_v1";
 
@@ -133,7 +131,7 @@ export default function App() {
   const persistLeaguePresets = async (updated: LeaguePreset[]) => {
     try {
       if (clientDb.getIsStatic()) {
-        await clientDb.saveLeaguePresets(updated);
+        await clientDb.saveLeaguePresets(updated, actionPassword);
         return;
       }
       const tokenToUse = actionPassword || token || "";
@@ -148,7 +146,7 @@ export default function App() {
       }
     } catch (err: any) {
       try {
-        await clientDb.saveLeaguePresets(updated);
+        await clientDb.saveLeaguePresets(updated, actionPassword);
       } catch (dbErr: any) {
         showToast("Failed to save league preset: " + err.message, "error");
       }
@@ -501,9 +499,9 @@ export default function App() {
 
     const saveViaClientDb = async () => {
       if (isEdit) {
-        await clientDb.updateMatch(matchData.id!, matchData);
+        await clientDb.updateMatch(matchData.id!, matchData, actionPassword);
       } else {
-        await clientDb.addMatch(matchData);
+        await clientDb.addMatch(matchData, actionPassword);
       }
     };
 
@@ -559,7 +557,7 @@ export default function App() {
   const handleDeleteMatch = async (id: string) => {
     try {
       if (clientDb.getIsStatic()) {
-        await clientDb.deleteMatch(id);
+        await clientDb.deleteMatch(id, actionPassword);
         showToast("Match record permanently deleted.", "success");
         fetchMatches();
         return;
@@ -582,7 +580,7 @@ export default function App() {
       }
     } catch (err: any) {
       try {
-        await clientDb.deleteMatch(id);
+        await clientDb.deleteMatch(id, actionPassword);
         showToast("Match record permanently deleted.", "success");
         fetchMatches();
       } catch (dbErr: any) {
@@ -596,9 +594,9 @@ export default function App() {
 
     const saveViaClientDb = async () => {
       if (isEdit) {
-        await clientDb.updateSchedule(scheduleData.id!, scheduleData);
+        await clientDb.updateSchedule(scheduleData.id!, scheduleData, actionPassword);
       } else {
-        await clientDb.addSchedule(scheduleData);
+        await clientDb.addSchedule(scheduleData, actionPassword);
       }
     };
 
@@ -641,7 +639,7 @@ export default function App() {
   const handleDeleteSchedule = async (id: string) => {
     try {
       if (clientDb.getIsStatic()) {
-        await clientDb.deleteSchedule(id);
+        await clientDb.deleteSchedule(id, actionPassword);
         showToast("Schedule entry deleted.", "success");
         fetchSchedules();
         return;
@@ -660,7 +658,7 @@ export default function App() {
       }
     } catch (err: any) {
       try {
-        await clientDb.deleteSchedule(id);
+        await clientDb.deleteSchedule(id, actionPassword);
         showToast("Schedule entry deleted.", "success");
         fetchSchedules();
       } catch (dbErr: any) {
@@ -672,7 +670,7 @@ export default function App() {
   const handleSaveRosterPlayer = async (player: RosterPlayer) => {
     try {
       if (clientDb.getIsStatic()) {
-        await clientDb.saveRosterPlayer(player);
+        await clientDb.saveRosterPlayer(player, actionPassword);
         showToast("Roster successfully updated.", "success");
         fetchRoster();
         return;
@@ -692,7 +690,7 @@ export default function App() {
       }
     } catch (err: any) {
       try {
-        await clientDb.saveRosterPlayer(player);
+        await clientDb.saveRosterPlayer(player, actionPassword);
         showToast("Roster successfully updated.", "success");
         fetchRoster();
       } catch (dbErr: any) {
@@ -704,7 +702,7 @@ export default function App() {
   const handleDeleteRosterPlayer = async (id: string) => {
     try {
       if (clientDb.getIsStatic()) {
-        await clientDb.deleteRosterPlayer(id);
+        await clientDb.deleteRosterPlayer(id, actionPassword);
         showToast("Player successfully removed from the roster.", "success");
         fetchRoster();
         return;
@@ -728,7 +726,7 @@ export default function App() {
       }
     } catch (err: any) {
       try {
-        await clientDb.deleteRosterPlayer(id);
+        await clientDb.deleteRosterPlayer(id, actionPassword);
         showToast("Player successfully removed from the roster.", "success");
         fetchRoster();
       } catch (dbErr: any) {

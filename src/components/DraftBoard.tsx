@@ -1,6 +1,7 @@
 import React from "react";
 import { Game, GamePlayerStats, GameObjectives, LANE_POSITIONS, OBJECTIVE_TYPES, OBJECTIVE_LABELS, RosterPlayer, Side } from "../types";
 import { HOK_HEROES } from "../heroes";
+import { canonicalizePlayerName } from "../utils";
 import { AlertTriangle, Ban, Star, Droplet, Swords } from "lucide-react";
 
 interface DraftBoardProps {
@@ -179,12 +180,12 @@ export const DraftBoard: React.FC<DraftBoardProps> = ({
         const col = STAT_COLUMNS[targetColIdx];
         const value = rawValue.trim();
         if (col.key === "playerName") {
-          // Same case-insensitive snap-to-roster as the input's own onBlur - a pasted block
-          // rarely blurs each individual cell, so this is the only chance to normalize casing
-          // before it's saved (otherwise "izziboii" pasted in would fragment this player's stats
-          // away from every "Izziboii" typed by hand elsewhere).
-          const match = roster.find((r) => r.name.trim().toLowerCase() === value.toLowerCase());
-          (targetPlayer as any)[col.key] = match ? match.name.trim() : value;
+          // Same case-insensitive snap-to-roster (also reconciling an old pre-rename nickname
+          // back to the player's current name) as the input's own onBlur below - a pasted block
+          // rarely blurs each individual cell, so this is the only chance to normalize it before
+          // it's saved (otherwise "izziboii" pasted in would fragment this player's stats away
+          // from every "Izziboii" typed by hand elsewhere).
+          (targetPlayer as any)[col.key] = canonicalizePlayerName(value, roster);
         } else {
           (targetPlayer as any)[col.key] = col.type === "number" ? Number(value) || 0 : col.type === "boolean" ? parseBooleanCell(value) : value;
         }
@@ -353,13 +354,14 @@ export const DraftBoard: React.FC<DraftBoardProps> = ({
                         onBlur={(e) => {
                           // Case doesn't matter while typing ("izziboii" is fine as long as
                           // they're really on this team's roster) - but once done, snap it to the
-                          // roster's own exact casing, so this player's stats always accumulate
-                          // under one single spelling instead of splitting across "Izziboii" and
-                          // "izziboii" as if they were two different people.
+                          // roster's own exact casing (also reconciling an old pre-rename nickname
+                          // back to the player's current name), so this player's stats always
+                          // accumulate under one single spelling instead of splitting across
+                          // "Izziboii" and "izziboii" as if they were two different people.
                           const typed = e.target.value.trim();
                           if (!typed) return;
-                          const match = roster.find((r) => r.name.trim().toLowerCase() === typed.toLowerCase());
-                          if (match && match.name.trim() !== typed) setPlayerField(side, idx, "playerName", match.name.trim());
+                          const canonical = canonicalizePlayerName(typed, roster);
+                          if (canonical !== typed) setPlayerField(side, idx, "playerName", canonical);
                         }}
                         className={inputCls(isDarkMode, "w-24")}
                       />

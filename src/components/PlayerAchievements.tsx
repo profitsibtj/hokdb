@@ -101,16 +101,19 @@ export const PlayerAchievements: React.FC<PlayerAchievementsProps> = ({ matches,
 
   const leagues = useMemo(() => leaguePresets.map((p) => p.name).filter(Boolean), [leaguePresets]);
 
+  // "ALL" is a real, separately-selectable value here (not just a fallback) - League/Playoffs
+  // scope both default to one specific league, but either can be switched to ALL-TIME to combine
+  // every league's regular-season (or every league's playoff) matches instead of just one.
   React.useEffect(() => {
-    if (leagues.length > 0 && !leagues.includes(selectedLeague)) {
+    if (leagues.length > 0 && selectedLeague !== "ALL" && !leagues.includes(selectedLeague)) {
       setSelectedLeague(leagues[0]);
     }
   }, [leagues, selectedLeague]);
 
   const scopedMatches = useMemo(() => {
     if (scope === "career") return matches;
-    if (scope === "league") return matches.filter((m) => m.league === selectedLeague && !m.isPlayoff);
-    return matches.filter((m) => m.league === selectedLeague && m.isPlayoff);
+    if (scope === "league") return matches.filter((m) => !m.isPlayoff && (selectedLeague === "ALL" || m.league === selectedLeague));
+    return matches.filter((m) => m.isPlayoff && (selectedLeague === "ALL" || m.league === selectedLeague));
   }, [matches, scope, selectedLeague]);
 
   const entries = useMemo(() => computeAchievements(scopedMatches), [scopedMatches]);
@@ -123,14 +126,18 @@ export const PlayerAchievements: React.FC<PlayerAchievementsProps> = ({ matches,
 
   return (
     <div className="space-y-4 font-mono text-xs animate-fadeIn">
-      <div className={`p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 transition-all ${
+      <div className={`p-4 rounded-2xl flex flex-wrap items-center gap-3 transition-all ${
         isDarkMode ? "bg-slate-900/50" : "bg-white border border-slate-200 shadow-sm"
       }`}>
-        <h2 className={`text-sm font-extrabold uppercase tracking-tight flex items-center gap-2 ${isDarkMode ? "text-slate-100" : "text-slate-900"}`}>
+        <h2 className={`text-sm font-extrabold uppercase tracking-tight flex items-center gap-2 shrink-0 ${isDarkMode ? "text-slate-100" : "text-slate-900"}`}>
           <Medal className="w-4 h-4 text-blue-500" />
           Achievement Log
         </h2>
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* ml-auto (instead of justify-between on the row above) pushes this whole group right as
+           one unit, so the scope toggle and the League dropdown inside it always stay flush next
+           to each other - justify-between was spacing them apart on their own wrapped line instead
+           of just separating the title from the controls like it was meant to. */}
+        <div className="flex items-center gap-3 flex-wrap ml-auto">
           <div className={`flex items-center gap-1 border p-1 rounded-xl ${isDarkMode ? "border-slate-800/60 bg-slate-950/20" : "border-slate-200 bg-slate-50"}`}>
             {scopeOptions.map((opt) => (
               <button
@@ -155,6 +162,7 @@ export const PlayerAchievements: React.FC<PlayerAchievementsProps> = ({ matches,
                 onChange={(e) => setSelectedLeague(e.target.value)}
                 className={`p-2 rounded-lg border font-bold cursor-pointer ${isDarkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-white border-slate-300 text-slate-900"}`}
               >
+                <option value="ALL">{scope === "playoffs" ? "ALL-TIME (ALL PLAYOFFS)" : "ALL-TIME (ALL LEAGUES)"}</option>
                 {leagues.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>

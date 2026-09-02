@@ -44,15 +44,6 @@ export const isoToGmt7Parts = (iso: string): { date: string; time: string } | nu
   };
 };
 
-// Pulls just the Week number out of a match's stage label, e.g. "Week 2" -> "Week 2" (already
-// normalized) or "W2" -> "Week 2". Returns null when no week is encoded (not every league/stage
-// uses a week structure).
-export const getMatchWeekLabel = (match: Match): string | null => {
-  const stage = (match.stage || "").toUpperCase();
-  const weekMatch = stage.match(/W(?:EEK)?\s*(\d+)/);
-  return weekMatch ? `Week ${weekMatch[1]}` : null;
-};
-
 // Extracts the canonical list of team names configured for a league preset, used to reconcile
 // team-name variants (e.g. an abbreviation typed instead of the full name) back to one consistent
 // name for stats/standings aggregation.
