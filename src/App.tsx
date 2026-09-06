@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Activity, Users, ArrowRightLeft, LogOut, Sun, Moon, Lock, Award, Trophy, Medal
+  Activity, Users, ArrowRightLeft, LogOut, Sun, Moon, Lock, Award, Trophy, Medal, UploadCloud
 } from "lucide-react";
 import { Match, RosterPlayer, ScheduleEntry, LeaguePreset, MatchFormat } from "./types";
 import { AuthScreen } from "./components/AuthScreen";
@@ -12,6 +12,7 @@ import { PlayerStats } from "./components/PlayerStats";
 import { HeadToHead } from "./components/HeadToHead";
 import { RosterManager } from "./components/RosterManager";
 import { PlayerAchievements } from "./components/PlayerAchievements";
+import { BulkImportMatches } from "./components/BulkImportMatches";
 import { clientDb, isTableMissingError } from "./dataClient";
 import { isoToGmt7Parts } from "./utils";
 
@@ -253,6 +254,12 @@ export default function App() {
   // slate on "Back" - simpler and more reliable than resetting each of its many internal fields by
   // hand.
   const [addMatchFormResetKey, setAddMatchFormResetKey] = useState(0);
+
+  // Rendered as a fixed overlay outside the tab-switch area below (like the Edit Match Modal) so it
+  // survives handleSaveMatch's own setActiveTab("matches") call after each match it saves - a bulk
+  // import saves many matches in a row, and switching tabs on the first success would otherwise
+  // unmount this mid-import.
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // Deep-link from a finished Match Schedule entry down into its posted result in Match Explorer.
   // Matched by league + date, same pairing used everywhere else a schedule is tied to a match.
@@ -979,7 +986,19 @@ export default function App() {
               </form>
             </div>
           ) : (
-            <AddMatchForm
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkImport(true)}
+                  className="px-4 py-2.5 rounded-xl border font-bold text-xs cursor-pointer transition-all flex items-center gap-1.5 bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/20"
+                  title="Import banyak match sekaligus dari spreadsheet stats, biar gak input satu-satu"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span className="font-mono">Bulk Import dari Spreadsheet</span>
+                </button>
+              </div>
+              <AddMatchForm
               key={addMatchFormResetKey}
               onSave={handleSaveMatch}
               onClose={() => {
@@ -1005,7 +1024,8 @@ export default function App() {
               onSaveSchedule={handleSaveSchedule}
               schedules={schedules}
               editingSchedule={editingScheduleEntry}
-            />
+              />
+            </div>
           )
         )}
       </main>
@@ -1028,6 +1048,20 @@ export default function App() {
               schedules={schedules}
             />
           </div>
+        </div>
+      )}
+
+      {/* BULK IMPORT MODAL */}
+      {showBulkImport && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/90 overflow-y-auto animate-fadeIn">
+          <BulkImportMatches
+            leaguePresets={leaguePresets}
+            roster={roster}
+            matches={matches}
+            isDarkMode={isDarkMode}
+            onSaveMatch={handleSaveMatch}
+            onClose={() => setShowBulkImport(false)}
+          />
         </div>
       )}
 
