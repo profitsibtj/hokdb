@@ -1,21 +1,30 @@
-# Supabase's free tier auto-pauses a project after 7 days with no API activity. This pings the
-# REST API on a schedule well inside that window, so the project (and this site's data) never
-# goes to sleep. Reuses the same VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY secrets deploy.yml
-# already has - no new secrets needed.
+# Supabase may pause Free projects with low activity during a 7-day period. A daily Edge Function
+# database read helps keep this project active, but cannot guarantee availability if GitHub Actions
+# is disabled or Supabase pauses it for another reason. Reuses the deploy.yml Supabase secrets.
 name: Keep Supabase Alive
 
 on:
   schedule:
-    # Every 3 days - comfortably inside Supabase's 7-day inactivity window even if a run is delayed.
-    - cron: "0 3 */3 * *"
+    # Daily at 03:00 UTC (10:00 WIB), comfortably inside the inactivity window.
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase REST API
+      - name: Ping Supabase database
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
-          curl -sf "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/matches?select=id&limit=1" \
-            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+          test -n "$SUPABASE_URL" || { echo "::error::VITE_SUPABASE_URL secret is missing"; exit 1; }
+          test -n "$SUPABASE_ANON_KEY" || { echo "::error::VITE_SUPABASE_ANON_KEY secret is missing"; exit 1; }
+          curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 30 --retry 3 --retry-delay 5 \
+            --retry-all-errors --write-out "\nSupabase database health check: HTTP %{http_code}\n" \
+            "$SUPABASE_URL/functions/v1/hokdb-api" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            --data '{"action":"health"}'

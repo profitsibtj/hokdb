@@ -1,0 +1,2 @@
+[functions.hokdb-api]
+verify_jwt = false
