@@ -216,8 +216,8 @@ Deno.serve(async (request) => {
     const viewerPassword = Deno.env.get("VIEWER_PASSWORD") || "";
     const adminPassword = Deno.env.get("ADMIN_PASSWORD") || "";
     const signingSecret = Deno.env.get("SESSION_SIGNING_SECRET") || "";
-    if (viewerPassword.length < 16 || adminPassword.length < 16 || signingSecret.length < 32) {
-      return respond({ error: "Password access is not configured. Set strong viewer/admin passwords and a signing secret." }, 503);
+    if (!viewerPassword || !adminPassword || !signingSecret) {
+      return respond({ error: "Password access is not configured. Set VIEWER_PASSWORD, ADMIN_PASSWORD, and SESSION_SIGNING_SECRET." }, 503);
     }
     if (viewerPassword === adminPassword) {
       return respond({ error: "Viewer and admin passwords must be different." }, 503);

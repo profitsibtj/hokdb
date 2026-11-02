@@ -212,7 +212,7 @@ async function startRedesign() {
   const parsed = new DOMParser().parseFromString(redesignDocument, "text/html");
   parsed.querySelector('link[href="./styles.css"]')?.remove();
   parsed.querySelectorAll("script").forEach((script) => script.remove());
-  document.documentElement.replaceWith(parsed.documentElement.cloneNode(true));
+  document.body.replaceWith(parsed.body.cloneNode(true));
 
   const { configureProduction } = await import("../redesign-preview/app.js");
   configureProduction(productionAdapter);

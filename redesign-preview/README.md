@@ -55,7 +55,7 @@ The database Auth migration may already be applied. Keep its restrictive RLS pol
    supabase link --project-ref YOUR_PROJECT_REF
    ```
 
-2. In Supabase Dashboard, set these Edge Function secrets. Use strong, different passwords (at least 16 characters) and a randomly generated signing secret (at least 32 characters). Never paste these values into chat or commit them:
+2. In Supabase Dashboard, set these Edge Function secrets. The viewer and admin passwords must be different. The signing secret can be any non-empty value. Never paste these values into chat or commit them:
 
    - `VIEWER_PASSWORD`
    - `ADMIN_PASSWORD`
