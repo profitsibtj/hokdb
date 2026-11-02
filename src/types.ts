@@ -61,7 +61,7 @@ export interface Match {
 export interface RosterPlayer {
   id?: string;
   name: string;
-  position: LanePosition | StaffRole;
+  position: LanePosition | StaffRole | "Substitute";
   secondaryPosition?: LanePosition;
   team: string;
   league: string;

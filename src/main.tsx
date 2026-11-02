@@ -52,6 +52,40 @@ type TournamentData = Omit<LeaguePreset, "defaultFormat"> & {
   defaultFormat: string;
 };
 
+type DatabaseRosterRow = {
+  id: string | number;
+  league: string;
+  team: string;
+  name?: string;
+  position?: unknown;
+  real_name?: string;
+  previous_names?: unknown;
+};
+
+function isDatabaseRosterRow(value: unknown): value is DatabaseRosterRow {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return (typeof row.id === "string" || typeof row.id === "number")
+    && typeof row.league === "string"
+    && typeof row.team === "string"
+    && (row.name === undefined || typeof row.name === "string")
+    && (row.real_name === undefined || typeof row.real_name === "string");
+}
+
+function isRosterPosition(value: unknown): value is RosterPlayer["position"] {
+  return ["Clash Lane", "Jungle", "Mid Lane", "Farm Lane", "Roam", "Flex", "Substitute", "Coach", "Analyst", "Manager"].includes(String(value));
+}
+
+function getRosterPosition(value: unknown): RosterPlayer["position"] {
+  if (value === undefined || value === null || value === "") return "Substitute";
+  if (!isRosterPosition(value)) throw new Error(`Unsupported roster role in Supabase: ${String(value)}`);
+  return value;
+}
+
+function getPreviousNames(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((name): name is string => typeof name === "string") : [];
+}
+
 const formatMap: Record<string, MatchFormat> = {
   BO1: "Bo1",
   BO3: "Bo3",
@@ -142,7 +176,7 @@ async function loadDatabaseRows() {
   }>("load");
 }
 
-async function saveSchedule(match: PreviewMatch): Promise<void> {
+async function saveSchedule(match: PreviewMatch, scheduleId?: string): Promise<void> {
   const existingSchedules = await clientDb.getSchedules();
   const matchDate = match.dateISO;
   const existing = existingSchedules.find((entry) => {
@@ -154,9 +188,9 @@ async function saveSchedule(match: PreviewMatch): Promise<void> {
   });
   const entry = {
     ...toSchedule(match, match.finished),
-    ...(existing?.id ? { id: existing.id } : {}),
+    ...(scheduleId ? { id: scheduleId } : existing?.id ? { id: existing.id } : {}),
   };
-  if (existing?.id) await clientDb.updateSchedule(existing.id, entry);
+  if (entry.id) await clientDb.updateSchedule(entry.id, entry);
   else await clientDb.addSchedule(entry);
 }
 
@@ -167,13 +201,17 @@ const productionAdapter = {
   signInAdmin: signInWithPassword,
   getSession: restoreAccessSession,
   signOut,
-  saveSchedule: async (match: PreviewMatch) => {
-    await saveSchedule(match);
+  saveSchedule: async (match: PreviewMatch, id?: string) => {
+    const scheduleId = id?.startsWith("db-schedule-") ? id.slice("db-schedule-".length) : undefined;
+    await saveSchedule(match, scheduleId);
   },
-  saveMatch: async (previewMatch: PreviewMatch) => {
+  saveMatch: async (previewMatch: PreviewMatch, id?: string) => {
     if (!previewMatch.finished) throw new Error("Only completed matches can be saved as results.");
     const existingMatches = await clientDb.getMatches();
-    const existing = existingMatches.find((match) => {
+    const matchIdFromKey = id?.startsWith("db-match-") ? id.slice("db-match-".length) : undefined;
+    const existing = matchIdFromKey
+      ? existingMatches.find((match) => match.id === matchIdFromKey)
+      : existingMatches.find((match) => {
       const sameTeams = (match.teamA === previewMatch.teamA && match.teamB === previewMatch.teamB)
         || (match.teamA === previewMatch.teamB && match.teamB === previewMatch.teamA);
       return match.league === previewMatch.league
@@ -181,16 +219,31 @@ const productionAdapter = {
         && match.stage === previewMatch.stage
         && isoToGmt7Parts(match.scheduledAt || "")?.date === previewMatch.dateISO;
     });
+    if (matchIdFromKey && !existing) throw new Error("The match being edited no longer exists in Supabase.");
     const match = toMatch(previewMatch);
-    if (existing?.id) await clientDb.updateMatch(existing.id, match);
+    const matchId = existing?.id;
+    if (matchId) await clientDb.updateMatch(matchId, match);
     else await clientDb.addMatch(match);
-    await saveSchedule(previewMatch);
+    const schedules = await clientDb.getSchedules();
+    const scheduleIdFromKey = id?.startsWith("db-schedule-") ? id.slice("db-schedule-".length) : undefined;
+    const oldSchedule = scheduleIdFromKey
+      ? schedules.find((schedule) => schedule.id === scheduleIdFromKey)
+      : existing && schedules.find((schedule) => {
+        const sameTeams = (schedule.teamA === existing.teamA && schedule.teamB === existing.teamB)
+          || (schedule.teamA === existing.teamB && schedule.teamB === existing.teamA);
+        return schedule.league === existing.league
+          && sameTeams
+          && isoToGmt7Parts(schedule.scheduledAt)?.date === isoToGmt7Parts(existing.scheduledAt || "")?.date;
+      });
+    await saveSchedule(previewMatch, oldSchedule?.id);
   },
-  saveRoster: async (player: { name: string; identity: string; role: string; tournament: string; team: string }) => {
+  saveRoster: async (player: { id?: string; name: string; identity: string; role: string; tournament: string; team: string }) => {
+    if (!isRosterPosition(player.role)) throw new Error(`Unsupported roster role: ${player.role}`);
     const record: RosterPlayer = {
+      ...(player.id ? { id: player.id } : {}),
       name: player.name,
       realName: player.identity,
-      position: player.role as RosterPlayer["position"],
+      position: player.role,
       league: player.tournament,
       team: player.team,
     };
@@ -198,6 +251,39 @@ const productionAdapter = {
   },
   deleteRoster: async (id: string) => {
     await clientDb.deleteRosterPlayer(id);
+  },
+  renameTeam: async (tournament: string, oldName: string, newName: string) => {
+    const rows = await loadDatabaseRows();
+    const rosterPlayers = rows.rosterRows.filter((row): row is DatabaseRosterRow => isDatabaseRosterRow(row)
+      && row.league === tournament && row.team === oldName);
+    for (const row of rosterPlayers) {
+      await clientDb.saveRosterPlayer({
+        id: String(row.id),
+        name: row.name || "",
+        position: getRosterPosition(row.position),
+        team: newName,
+        league: tournament,
+        realName: row.real_name || "",
+        previousNames: getPreviousNames(row.previous_names),
+      });
+    }
+
+    const matches = await clientDb.getMatches();
+    for (const match of matches) {
+      if (match.league !== tournament || (match.teamA !== oldName && match.teamB !== oldName)) continue;
+      if (match.teamA === oldName) match.teamA = newName;
+      if (match.teamB === oldName) match.teamB = newName;
+      if (match.winner === oldName) match.winner = newName;
+      if (match.id) await clientDb.updateMatch(match.id, match);
+    }
+
+    const schedules = await clientDb.getSchedules();
+    for (const schedule of schedules) {
+      if (schedule.league !== tournament || (schedule.teamA !== oldName && schedule.teamB !== oldName)) continue;
+      if (schedule.teamA === oldName) schedule.teamA = newName;
+      if (schedule.teamB === oldName) schedule.teamB = newName;
+      if (schedule.id) await clientDb.updateSchedule(schedule.id, schedule);
+    }
   },
   saveTournaments: async (tournaments: TournamentData[]) => {
     const presets: LeaguePreset[] = tournaments.map((tournament) => ({

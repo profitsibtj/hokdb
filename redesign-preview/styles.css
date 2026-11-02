@@ -922,8 +922,18 @@ body.dark-mode .entry-objective-team input { border-color: #465349; color: #edf3
   .module-page-heading { align-items: stretch; }
 }
 
-.game-score-strip { display: flex; justify-content: center; gap: 12px; }
-.game-score-strip > span { min-width: 0; max-width: 38%; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-summary { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; }
+.detail-team { min-width: 0; }
+.detail-team strong { overflow-wrap: anywhere; }
+.detail-score { display: grid; grid-template-columns: auto auto auto; justify-items: center; gap: 0 8px; }
+.detail-score .match-status { grid-column: 1 / -1; margin-top: 5px; color: #64736a; font-size: 9px; font-weight: 700; }
+.stream-play-link { width: 30px; height: 30px; display: inline-grid; place-items: center; border: 1px solid #dfe8df; border-radius: 50%; color: #247650; background: #f3f8f3; font-size: 11px; text-decoration: none; }
+.stream-play-link:hover { border-color: #b7d7c0; background: #e8f3e9; }
+.edit-match-button { margin-left: auto; }
+.game-toggle .game-card-heading { grid-template-columns: minmax(105px, auto) minmax(0, 1fr) auto auto; }
+.game-heading-label { grid-column: 1; min-width: 0; }
+.game-score-strip { position: static; display: flex; grid-column: 2; align-items: center; justify-content: center; width: 100%; max-width: none; gap: 10px; transform: none; }
+.game-score-strip > span { min-width: 0; max-width: none; flex: 1 1 0; overflow-wrap: anywhere; white-space: normal; }
 .game-score-strip > span:first-child { text-align: right; }
 .game-score-strip > span:last-child { text-align: left; }
 .game-score-strip > strong { flex: 0 0 auto; }
@@ -935,6 +945,11 @@ body.dark-mode .entry-objective-team input { border-color: #465349; color: #edf3
 .tournament-edit-form .checkbox-field, .tournament-create-form .checkbox-field { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; height: 36px; }
 .tournament-edit-form .checkbox-field input, .tournament-create-form .checkbox-field input { width: 16px; height: 16px; }
 .participant-add-form { border-top: 1px solid #edf0ec; background: #f9fbf8; }
+.participant-edit-toggle, .participant-edit-cancel, .roster-edit-toggle { padding: 5px 7px; border: 1px solid #dfe7df; border-radius: 5px; color: #4d6454; background: #fff; font-size: 9px; font-weight: 800; cursor: pointer; }
+.participant-edit-row > td { padding: 8px 10px; background: #f9fbf8; }
+.participant-edit-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.participant-edit-form label, .roster-edit-form label { display: grid; flex: 1 1 130px; gap: 4px; color: #59665d; font-size: 10px; font-weight: 700; }
+.participant-edit-form input, .participant-edit-form select, .roster-edit-form input, .roster-edit-form select { width: 100%; min-width: 0; height: 32px; padding: 0 8px; border: 1px solid #dfe7df; border-radius: 5px; color: #36443b; background: #fff; font-size: 11px; }
 .participant-table { min-width: 720px; }
 .tournament-help { margin-top: 16px; padding: 16px; color: #5d6a61; }
 .tournament-help summary { color: #344239; font-size: 13px; font-weight: 800; cursor: pointer; }
@@ -945,6 +960,10 @@ body.dark-mode .entry-objective-team input { border-color: #465349; color: #edf3
 .roster-add-form input, .roster-add-form select { height: 32px; font-size: 11px; }
 .roster-player-list > div { align-items: center; }
 .roster-player-list .danger-button { margin-left: auto; }
+.roster-player-list > div { flex-wrap: wrap; }
+.roster-player-list > div > strong { min-width: 0; overflow-wrap: anywhere; }
+.roster-edit-form { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: end; gap: 7px; padding: 8px; border: 1px solid #e5eae4; border-radius: 6px; background: #f9fbf8; }
+.roster-edit-form[hidden] { display: none; }
 .side-choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; padding: 10px; border: 1px solid #e6ebe5; border-radius: 8px; background: #f8faf7; }
 .side-choice-row > span { margin-right: 5px; color: #77847a; font-size: 10px; font-weight: 900; letter-spacing: .08em; }
 .side-choice { min-height: 34px; padding: 0 12px; border: 1px solid #dce5dc; border-radius: 7px; color: #56645a; background: #fff; font-size: 11px; font-weight: 800; cursor: pointer; }
@@ -985,8 +1004,23 @@ body.dark-mode .tournament-edit-form input, body.dark-mode .tournament-edit-form
 body.dark-mode .connect-database-button { border-color: #435047; color: #bde5c7; background: #253e2e; }
 body.dark-mode .database-modal-copy, body.dark-mode .database-key-note { color: #c1ccc3; }
 body.dark-mode .database-connect-error { border-color: #684341; color: #ffc9c3; background: #382523; }
+body.dark-mode .detail-score .match-status { color: #c1ccc3; }
+body.dark-mode .stream-play-link { border-color: #465349; color: #b7e5c4; background: #202a23; }
+body.dark-mode .participant-edit-row > td, body.dark-mode .roster-edit-form { border-color: #39463d; background: #202a23; }
+body.dark-mode .participant-edit-form label, body.dark-mode .roster-edit-form label { color: #d3ddd5; }
+body.dark-mode .participant-edit-form input, body.dark-mode .participant-edit-form select, body.dark-mode .roster-edit-form input, body.dark-mode .roster-edit-form select { border-color: #465349; color: #edf3ee; background: #1b241e; }
+body.dark-mode .participant-edit-toggle, body.dark-mode .participant-edit-cancel, body.dark-mode .roster-edit-toggle { border-color: #465349; color: #d3ddd5; background: #202a23; }
+
 @media (max-width: 760px) {
   .connect-database-button { padding: 7px 8px; font-size: 9px; }
+  .detail-summary { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; padding: 13px 10px; }
+  .detail-team strong { font-size: 14px; }
+  .game-toggle .game-card-heading { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "label pill chevron" "score score score"; }
+  .game-heading-label { grid-area: label; }
+  .game-score-strip { grid-area: score; width: 100%; max-width: 100%; justify-self: stretch; transform: none; }
+  .winner-pill { grid-area: pill; }
+  .game-chevron { grid-area: chevron; }
+  .roster-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 761px) and (max-width: 1250px) {
   .topbar { gap: 12px; padding-right: 18px; padding-left: 18px; }
@@ -1019,11 +1053,11 @@ body.dark-mode .h2h-mode-switch button.active { border-color: #548064; color: #b
   .game-score-strip { gap: 7px; }
 }
 
-.game-toggle .game-card-heading { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; }
-.game-score-strip { position: absolute; top: 50%; left: 50%; width: max-content; max-width: calc(100% - 280px); transform: translate(-50%, -50%); }
+.game-toggle .game-card-heading { display: grid; grid-template-columns: minmax(105px, auto) minmax(0, 1fr) auto auto; align-items: center; gap: 12px; }
+.game-score-strip { position: static; grid-column: 2; width: 100%; max-width: none; transform: none; }
 .game-heading-label { grid-column: 1; min-width: 0; }
-.winner-pill { grid-column: 2; margin-left: 0 !important; }
-.game-chevron { grid-column: 3; }
+.winner-pill { grid-column: 3; margin-left: 0 !important; }
+.game-chevron { grid-column: 4; }
 @media (max-width: 760px) {
   .game-toggle .game-card-heading { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "label pill chevron" "score score score"; }
   .game-heading-label { grid-area: label; }
@@ -1031,3 +1065,7 @@ body.dark-mode .h2h-mode-switch button.active { border-color: #548064; color: #b
   .winner-pill { grid-area: pill; }
   .game-chevron { grid-area: chevron; }
 }
+.game-side-heading strong { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+.draft-side-heading > div { min-width: 0; }
+.draft-side-heading strong { overflow-wrap: anywhere; }
+.roster-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
