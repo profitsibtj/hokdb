@@ -46,33 +46,29 @@
         </nav>
         <div class="topbar-actions">
           <button class="connect-database-button" id="connect-database-button" type="button">Connect Supabase</button>
-          <span class="role-indicator" id="role-indicator">Viewer mode</span>
           <button class="icon-button" id="theme-button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
           <button class="sign-out-button" id="sign-out-button" type="button">Sign out</button>
         </div>
       </header>
 
       <main class="main-area">
-        <div class="preview-notice" id="database-status" aria-live="polite"><span>UI CONCEPT</span> Sample data · Preview only</div>
-
         <div class="page-content" id="page-content">
           <section class="page-heading">
             <div>
               <p class="eyebrow">CURRENT SEASON · INDONESIA</p>
               <h1>Matches</h1>
-              <p class="heading-copy">Follow upcoming fixtures and results in one place.</p>
             </div>
             <div class="heading-actions">
               <label class="select-wrap">
                 <span class="sr-only">Select league</span>
                 <select id="league-select" aria-label="Select league">
+                  <option value="All leagues" selected>All leagues</option>
                   <option>Honor of Kings Indonesia League</option>
                   <option>Honor of Kings Invitational</option>
-                  <option>All leagues</option>
                 </select>
                 <span class="select-chevron">⌄</span>
               </label>
-              <button class="button button-primary" id="add-match-button"><span class="button-plus">＋</span> Add match</button>
+              <button class="button button-primary" id="add-match-button" hidden><span class="button-plus">＋</span> Add match</button>
             </div>
           </section>
 
@@ -179,7 +175,7 @@
     </div>
     <div class="modal-backdrop" id="database-modal" hidden>
       <section class="modal database-modal" role="dialog" aria-modal="true" aria-labelledby="database-modal-title">
-        <div class="modal-heading"><div><p class="eyebrow">LIVE DATA · READ ONLY</p><h2 id="database-modal-title">Connect Supabase</h2></div><button type="button" class="icon-button close-database-modal" aria-label="Close connection settings">×</button></div>
+        <div class="modal-heading"><div><p class="eyebrow">SUPABASE CONNECTION</p><h2 id="database-modal-title">Connect Supabase</h2></div><button type="button" class="icon-button close-database-modal" aria-label="Close connection settings">×</button></div>
         <p class="database-modal-copy">Sign in with a Supabase account to read tournaments, fixtures, results, and rosters.</p>
         <form id="database-connect-form">
           <label class="field-label">Project URL<input id="database-project-url" type="url" required value="https://hmgujfgohimzxyvsnpyl.supabase.co" placeholder="https://your-project.supabase.co" /></label>

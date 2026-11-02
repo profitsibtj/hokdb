@@ -18,7 +18,6 @@ const appShell = document.querySelector("#app-shell");
 const accessGate = document.querySelector("#access-gate");
 const toast = document.querySelector("#toast");
 const databaseModal = document.querySelector("#database-modal");
-const databaseStatus = document.querySelector("#database-status");
 const databaseConnectionError = document.querySelector("#database-connect-error");
 let previewViewerPassword = "viewer-preview";
 let previewAdminPassword = "admin-preview";
@@ -440,8 +439,6 @@ async function refreshProductionData() {
   leagueOptions = Object.keys(tournamentSettings);
   liveDataMode = true;
   hasAdminAccess = !!productionDatabaseAdapter.canWrite;
-  document.querySelector("#role-indicator").textContent = hasAdminAccess ? "Admin mode" : "Viewer mode";
-  updateDatabaseStatus(true, `Supabase · ${Object.keys(matchDetails).length} records · ${hasAdminAccess ? "admin access" : "read only"}`);
   setPage(activePage);
 }
 
@@ -459,8 +456,6 @@ export function configureProduction(adapter) {
   document.querySelector("#connect-database-button").hidden = true;
   document.querySelector("#continue-to-entry").textContent = "Save scheduled match →";
   document.querySelector("#save-match-button").textContent = "Save completed match →";
-  const notice = document.querySelector("#database-status");
-  notice.innerHTML = '<span>SUPABASE · LIVE</span> Sign in to load current database records';
   restoreProductionSession();
 }
 
@@ -543,14 +538,7 @@ function validatePublicAnonKey(key) {
   }
 }
 
-function updateDatabaseStatus(connected, message) {
-  databaseStatus.classList.toggle("connected", connected);
-  const dataMode = productionMode
-    ? (productionDatabaseAdapter?.canWrite ? "ADMIN ACCESS" : "READ ONLY")
-    : "READ ONLY";
-  document.querySelector(".preview-notice").innerHTML = connected
-    ? `<span>LIVE DATA · ${dataMode}</span> ${escapeHTML(message)}`
-    : `<span>UI CONCEPT</span> ${escapeHTML(message === "Connection failed · sample data" ? message : "Sample data · Preview only")}`;
+function updateDatabaseConnectionButton(connected) {
   document.querySelector("#connect-database-button").textContent = connected ? "Refresh" : "Connect Supabase";
 }
 
@@ -609,8 +597,7 @@ async function connectToDatabase(projectUrl, anonKey, credentials) {
   leagueOptions = Object.keys(tournamentSettings);
   liveDataMode = true;
   hasAdminAccess = false;
-  document.querySelector("#role-indicator").textContent = "Viewer mode";
-  updateDatabaseStatus(true, `Supabase · ${Object.keys(matchDetails).length} records · read only`);
+  updateDatabaseConnectionButton(true);
   setPage(activePage);
 }
 
@@ -665,7 +652,6 @@ function renderModuleHeading(page, description) {
     `<option value="${escapeHTML(league === "All leagues" ? "all" : league)}">${escapeHTML(league)}</option>`
   ).join("");
   return `<section class="page-heading module-page-heading">
-    <div><p class="eyebrow">CURRENT SEASON · INDONESIA</p><h1>${pageTitles[page]}</h1><p class="heading-copy">${description}</p></div>
     <label class="select-wrap"><span class="sr-only">Filter by league</span><select data-module-league aria-label="Filter by league">${options}</select><span class="select-chevron">⌄</span></label>
   </section>`;
 }
@@ -1283,7 +1269,9 @@ function bindCompareControls(league) {
 }
 
 function bindMatchPage() {
-  document.querySelector("#add-match-button").addEventListener("click", () => requestAdminAccess());
+  const addMatchButton = document.querySelector("#add-match-button");
+  addMatchButton.hidden = !(productionMode ? productionDatabaseAdapter?.canWrite : hasAdminAccess);
+  addMatchButton.addEventListener("click", () => requestAdminAccess());
   document.querySelector("#match-search").addEventListener("input", updateResults);
   document.querySelector("#result-filter").addEventListener("change", updateResults);
   document.querySelector("#league-select").addEventListener("change", updateLeagueView);
@@ -1306,8 +1294,8 @@ function syncMatchLeagueOptions() {
   const selector = document.querySelector("#league-select");
   if (!selector) return;
   const selected = selector.value;
-  selector.innerHTML = `${leagueOptions.map((league) => `<option>${escapeHTML(league)}</option>`).join("")}<option value="All leagues">All leagues</option>`;
-  selector.value = leagueOptions.includes(selected) || selected === "All leagues" ? selected : (leagueOptions[0] || "All leagues");
+  selector.innerHTML = `<option value="All leagues">All leagues</option>${leagueOptions.map((league) => `<option>${escapeHTML(league)}</option>`).join("")}`;
+  selector.value = leagueOptions.includes(selected) || selected === "All leagues" ? selected : "All leagues";
 }
 
 function updateResults() {
@@ -1906,9 +1894,7 @@ document.querySelector("#database-connect-form").addEventListener("submit", asyn
   } catch (error) {
     databaseConnectionError.textContent = `Could not connect: ${error.message}`;
     databaseConnectionError.hidden = false;
-    updateDatabaseStatus(liveDataMode, liveDataMode
-      ? "Supabase · using last successful read"
-      : "Connection failed · sample data");
+    updateDatabaseConnectionButton(liveDataMode);
   } finally {
     submit.disabled = false;
     submit.innerHTML = 'Sign in and connect <span>→</span>';
@@ -2101,7 +2087,7 @@ document.querySelector("#access-form").addEventListener("submit", async (event) 
     try {
       const { url, anonKey, accessToken, refreshToken } = JSON.parse(savedConnection);
       connectToDatabase(url, anonKey, { accessToken, refreshToken }).catch((error) => {
-        updateDatabaseStatus(false, "Connection failed · sample data");
+        updateDatabaseConnectionButton(false);
         showToast(`Could not restore Supabase connection: ${error.message}`);
       });
     } catch (error) {
@@ -2129,7 +2115,6 @@ document.querySelector("#admin-access-form").addEventListener("submit", async (e
       productionDatabaseAdapter.canWrite = true;
       hasAdminAccess = true;
       await refreshProductionData();
-      document.querySelector("#role-indicator").textContent = "Admin mode";
       const action = pendingAdminAction || openModal;
       pendingAdminAction = null;
       closeAdminAccess();
@@ -2148,7 +2133,6 @@ document.querySelector("#admin-access-form").addEventListener("submit", async (e
     return;
   }
   hasAdminAccess = true;
-  document.querySelector("#role-indicator").textContent = "Admin mode";
   const action = pendingAdminAction || openModal;
   pendingAdminAction = null;
   closeAdminAccess();
@@ -2162,7 +2146,6 @@ document.querySelector("#sign-out-button").addEventListener("click", () => {
       sessionStorage.removeItem(databaseSessionKey);
       appShell.hidden = true;
       accessGate.hidden = false;
-      document.querySelector("#role-indicator").textContent = "Viewer mode";
       document.body.style.overflow = "";
       document.querySelector("#access-form").reset();
       document.querySelector("#access-error").hidden = true;
@@ -2173,7 +2156,6 @@ document.querySelector("#sign-out-button").addEventListener("click", () => {
   sessionStorage.removeItem(databaseSessionKey);
   appShell.hidden = true;
   accessGate.hidden = false;
-  document.querySelector("#role-indicator").textContent = "Viewer mode";
   document.body.style.overflow = "";
   document.querySelector("#access-form").reset();
   document.querySelector("#access-error").hidden = true;
