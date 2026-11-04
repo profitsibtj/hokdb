@@ -93,5 +93,7 @@ export interface LeaguePreset {
   teamAbbreviations?: Record<string, string>;
   teamQualifications?: Record<string, string>;
   playoffsEnabled?: boolean;
+  bracketFormat?: "single-elimination" | "double-elimination";
+  playInEnabled?: boolean;
   brackets?: unknown[];
 }

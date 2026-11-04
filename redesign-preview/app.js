@@ -40,6 +40,8 @@ let tournamentSettings = {
   "Honor of Kings Indonesia League": {
     globalBanPick: false,
     playoffsEnabled: true,
+    bracketFormat: "double-elimination",
+    playInEnabled: false,
     participants: [
       { team: "Alter Ego", abbreviation: "AE", route: "Invited" },
       { team: "Bigetron Esports", abbreviation: "BTR", route: "Invited" },
@@ -51,6 +53,8 @@ let tournamentSettings = {
   "Honor of Kings Invitational": {
     globalBanPick: true,
     playoffsEnabled: true,
+    bracketFormat: "double-elimination",
+    playInEnabled: false,
     participants: [
       { team: "Bigetron Esports", abbreviation: "BTR", route: "Invited" },
       { team: "EVOS", abbreviation: "EVOS", route: "Wildcard" },
@@ -276,6 +280,10 @@ function normalizeMatchFormat(format) {
   return ["BO1", "BO3", "BO5", "BO7"].includes(normalized) ? normalized : "BO1";
 }
 
+function isPlayoffStage(stage) {
+  return /\b(play[\s-]?ins?|playoffs?|upper bracket|lower bracket|quarter ?finals?|semi ?finals?|grand final)\b/i.test(String(stage || ""));
+}
+
 function mapDatabaseGame(rawGame, match, index, rosterByTeam) {
   const game = typeof rawGame === "string" ? JSON.parse(rawGame) : rawGame;
   const gameWinner = game.winner === "A" ? match.teamA : game.winner === "B" ? match.teamB : game.winner || "";
@@ -339,7 +347,7 @@ function mapDatabaseMatch(row, rosterByTeam) {
     scoreB: Number(row.score_b) || 0,
     format: normalizeMatchFormat(row.format),
     stage: row.stage || "Match",
-    phase: row.is_playoff ? "Playoffs" : "Group Stage",
+    phase: row.is_playoff || isPlayoffStage(row.stage) ? "Playoffs" : "Group Stage",
     date: formatDatabaseDate(scheduledAt),
     dateISO: getGmt7Parts(scheduledAt)?.date || "",
     entryTime: getGmt7Parts(scheduledAt)?.time || "",
@@ -363,7 +371,7 @@ function mapDatabaseMatch(row, rosterByTeam) {
 function mapDatabaseSchedule(row) {
   const scheduledAt = row.scheduled_at || "";
   const stage = row.match_code || "Scheduled match";
-  const phase = /\b(play[\s-]?ins?|playoffs?|upper bracket|lower bracket|quarterfinals?|semifinals?|grand final|final)\b/i.test(stage)
+  const phase = isPlayoffStage(stage)
     ? "Playoffs"
     : "Group Stage";
   return {
@@ -453,14 +461,21 @@ function applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows
       rawData: data,
       globalBanPick: !!(data.globalBanPick ?? data.fearlessDraft),
       playoffsEnabled: !!data.playoffsEnabled,
+      bracketFormat: data.bracketFormat === "single-elimination" ? "single-elimination" : "double-elimination",
+      playInEnabled: !!data.playInEnabled || Object.values(nextMatches).some((match) =>
+        match.league === name && /\bplay[\s-]?in/i.test(match.stage || "")
+      ),
       participants,
     };
   });
   Object.values(nextMatches).forEach((match) => {
     if (!nextSettings[match.league]) {
-      nextSettings[match.league] = { globalBanPick: false, playoffsEnabled: false, participants: [] };
+      nextSettings[match.league] = { globalBanPick: false, playoffsEnabled: false, bracketFormat: "double-elimination", playInEnabled: false, participants: [] };
     }
-    if (match.phase === "Playoffs") nextSettings[match.league].playoffsEnabled = true;
+    if (match.phase === "Playoffs") {
+      nextSettings[match.league].playoffsEnabled = true;
+      if (/\bplay[\s-]?in/i.test(match.stage || "")) nextSettings[match.league].playInEnabled = true;
+    }
     const participants = nextSettings[match.league].participants;
     [match.teamA, match.teamB].forEach((team) => {
       if (team && !participants.some((participant) => participant.team === team)) {
@@ -472,7 +487,7 @@ function applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows
     const separator = key.indexOf("|");
     const league = key.slice(0, separator);
     const team = key.slice(separator + 1);
-    if (!nextSettings[league]) nextSettings[league] = { globalBanPick: false, playoffsEnabled: false, participants: [] };
+    if (!nextSettings[league]) nextSettings[league] = { globalBanPick: false, playoffsEnabled: false, bracketFormat: "double-elimination", playInEnabled: false, participants: [] };
     if (!nextSettings[league].participants.some((participant) => participant.team === team)) {
       nextSettings[league].participants.push({ team, abbreviation: team.slice(0, 3).toUpperCase(), route: "" });
     }
@@ -577,6 +592,8 @@ function getTournamentPayload() {
       name,
       fearlessDraft: !!config.globalBanPick,
       playoffsEnabled: !!config.playoffsEnabled,
+      bracketFormat: config.bracketFormat || "double-elimination",
+      playInEnabled: !!config.playInEnabled,
       teamsText: config.participants.map((participant) => participant.team).join("\n"),
       teamAbbreviations: abbreviations,
       teamQualifications: qualifications,
@@ -725,7 +742,52 @@ function getCompletedMatches(league = "all") {
 }
 
 function getLeagueTeams(league) {
-  return leagueTeams[league] || [];
+  if (league !== "all") return leagueTeams[league] || [];
+  return [...new Set(leagueOptions.flatMap((tournament) => getLeagueTeams(tournament)))];
+}
+
+function getTeamAbbreviation(tournament, team) {
+  return tournamentSettings[tournament]?.participants.find((participant) => participant.team === team)?.abbreviation
+    || team.split(/\s+/).map((part) => part[0]).join("").slice(0, 5).toUpperCase();
+}
+
+function getPlayoffStageOptions(tournament) {
+  const config = tournamentSettings[tournament] || {};
+  const stages = config.bracketFormat === "single-elimination"
+    ? ["Playoffs Round 1", "Quarterfinals", "Semifinals", "Final"]
+    : ["Upper Bracket Quarterfinals", "Upper Bracket Semifinals", "Upper Bracket Final", "Lower Bracket Round 1", "Lower Bracket Quarterfinals", "Lower Bracket Semifinals", "Lower Bracket Final", "Grand Final"];
+  return config.playInEnabled ? ["Play-In Stage", ...stages] : stages;
+}
+
+function normalizeBracketStage(stage, phase) {
+  const label = String(stage || "").trim();
+  if (!label) return phase === "Playoffs" ? "Playoffs" : "Group Stage";
+  const normalized = label.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (/\bplay[\s-]?in(s)?\b/.test(normalized)) return "Play-In Stage";
+  if (/\bgrand final\b/.test(normalized)) return "Grand Final";
+  if (/\bupper\b/.test(normalized) && /\bquarter ?finals?\b/.test(normalized)) return "Upper Bracket Quarterfinals";
+  if (/\bupper\b/.test(normalized) && /\bsemi ?finals?\b/.test(normalized)) return "Upper Bracket Semifinals";
+  if (/\bupper\b/.test(normalized) && /\bfinal\b/.test(normalized)) return "Upper Bracket Final";
+  if (/\blower\b/.test(normalized) && /\bround\s*1\b/.test(normalized)) return "Lower Bracket Round 1";
+  if (/\blower\b/.test(normalized) && /\bquarter ?finals?\b/.test(normalized)) return "Lower Bracket Quarterfinals";
+  if (/\blower\b/.test(normalized) && /\bsemi ?finals?\b/.test(normalized)) return "Lower Bracket Semifinals";
+  if (/\blower\b/.test(normalized) && /\bfinal\b/.test(normalized)) return "Lower Bracket Final";
+  if (/\bquarter ?finals?\b/.test(normalized)) return "Quarterfinals";
+  if (/\bsemi ?finals?\b/.test(normalized)) return "Semifinals";
+  if (/^playoffs?\s+round\s+\d+$/.test(normalized)) return `Playoffs Round ${normalized.match(/\d+$/)[0]}`;
+  if (/^(group|group stage)(\s|$)/.test(normalized)) return label.replace(/^group$/i, "Group Stage");
+  return label;
+}
+
+function getBracketStageOrder(stage) {
+  const order = [
+    "Play-In Stage", "Playoffs Round 1", "Upper Bracket Quarterfinals",
+    "Lower Bracket Round 1", "Upper Bracket Semifinals", "Lower Bracket Quarterfinals",
+    "Upper Bracket Final", "Lower Bracket Semifinals",
+    "Lower Bracket Final", "Final", "Grand Final",
+  ];
+  const index = order.indexOf(stage);
+  return index < 0 ? order.length : index;
 }
 
 function renderModuleHeading(page, description) {
@@ -793,8 +855,8 @@ function getStandings(league, phase = standingsStage) {
     });
     const a = standings.get(match.teamA);
     const b = standings.get(match.teamB);
-    a.bracketStages.add(match.stage || (match.phase === "Playoffs" ? "Play-ins / Playoffs" : "Group Stage"));
-    b.bracketStages.add(match.stage || (match.phase === "Playoffs" ? "Play-ins / Playoffs" : "Group Stage"));
+    a.bracketStages.add(normalizeBracketStage(match.stage, match.phase));
+    b.bracketStages.add(normalizeBracketStage(match.stage, match.phase));
     if (!match.finished) return;
     a.played += 1; b.played += 1;
     a.gameWins += match.scoreA; a.gameLosses += match.scoreB;
@@ -816,7 +878,10 @@ function renderStandings(league) {
   return `<section class="content-card module-card">
     <div class="section-heading standings-heading"><div><h2>${escapeHTML(stageLabel)} standings</h2></div><label class="select-wrap"><span class="sr-only">Standings stage</span><select data-standings-stage aria-label="Standings stage"><option value="group" ${standingsStage === "group" ? "selected" : ""}>Group Stage</option>${playoffAvailable ? `<option value="playoffs" ${standingsStage === "playoffs" ? "selected" : ""}>Playoffs · includes Play-ins</option>` : ""}</select><span class="select-chevron">⌄</span></label></div>
     <div class="module-table-wrap"><table class="module-table"><thead><tr><th>#</th><th>TEAM</th><th>BRACKET STAGE</th><th>MP</th><th>W</th><th>L</th><th>GAME SCORE</th><th>GAME DIFF</th></tr></thead>
-      <tbody>${standings.map((row, index) => `<tr><td class="rank-cell">${String(index + 1).padStart(2, "0")}</td><td><strong class="module-team-name">${escapeHTML(row.team)}</strong></td><td>${escapeHTML([...row.bracketStages].join(", ") || stageLabel)}</td><td>${row.played}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.gameWins}-${row.gameLosses}</td><td><strong>${row.gameDiff > 0 ? "+" : ""}${row.gameDiff}</strong></td></tr>`).join("")}</tbody>
+      <tbody>${standings.map((row, index) => {
+        const stages = [...row.bracketStages].sort((a, b) => getBracketStageOrder(a) - getBracketStageOrder(b) || a.localeCompare(b));
+        return `<tr><td class="rank-cell">${String(index + 1).padStart(2, "0")}</td><td><strong class="module-team-name">${escapeHTML(row.team)}</strong></td><td>${escapeHTML(stages.join(", ") || stageLabel)}</td><td>${row.played}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.gameWins}-${row.gameLosses}</td><td><strong>${row.gameDiff > 0 ? "+" : ""}${row.gameDiff}</strong></td></tr>`;
+      }).join("")}</tbody>
     </table></div>
   </section>`;
 }
@@ -827,7 +892,7 @@ function renderPlayerStats(league) {
     <div class="section-heading"><h2>Player leaderboard</h2></div>
     <div class="module-table-wrap"><table class="module-table player-module-table"><thead><tr><th>PLAYER</th><th>TEAM</th><th>GAMES</th><th>K/D/A</th><th>KDA</th><th>KP</th><th>GOLD</th><th>HERO DMG</th><th>DMG TAKEN</th><th>1K</th><th>2K</th><th>3K</th><th>4K</th><th>5K</th><th>MVP</th><th>FIRST BLOOD</th></tr></thead>
       <tbody>${players.slice(0, 12).map((player, index) => {
-        const teamAbbr = tournamentSettings[player.tournament]?.participants.find((participant) => participant.team === player.team)?.abbreviation || player.team;
+        const teamAbbr = getTeamAbbreviation(player.tournament, player.team);
         return `<tr><td><span class="player-rank">${String(index + 1).padStart(2, "0")}</span><strong class="module-team-name">${escapeHTML(player.name)}</strong><small class="table-sub">${escapeHTML(player.lane)}</small></td><td>${escapeHTML(teamAbbr)}</td><td>${player.games}</td><td>${player.kills}/${player.deaths}/${player.assists}</td><td><strong>${player.kda}</strong></td><td>${player.kp}%</td><td>${Math.round(player.gold / player.games).toLocaleString("en-US")}</td><td>${Math.round(player.damage / player.games).toLocaleString("en-US")}</td><td>${Math.round(player.damageTaken / player.games).toLocaleString("en-US")}</td>${[1, 2, 3, 4, 5].map((count) => `<td>${player.multiKills[count]}</td>`).join("")}<td>${player.mvp}</td><td>${player.firstBlood}</td></tr>`;
       }).join("")}</tbody>
     </table></div>
@@ -860,7 +925,7 @@ function renderRoster(league) {
           <label>Role<select name="role">${[...lanes, "Substitute", "Coach", "Analyst"].map((role) => `<option>${escapeHTML(role)}</option>`).join("")}</select></label>
           <button type="submit" class="button button-secondary">Add to roster</button>
         </form>` : "";
-        return `<article class="roster-team-card"><header><span class="team-monogram">ABBR</span><div><strong>${escapeHTML(team)}</strong><small>${escapeHTML(tournament)} · ${members.length} roster members</small></div></header>
+        return `<article class="roster-team-card"><header><span class="team-monogram">${escapeHTML(getTeamAbbreviation(tournament, team))}</span><div><strong>${escapeHTML(team)}</strong><small>${escapeHTML(tournament)} · ${members.length} roster members</small></div></header>
           <div class="roster-player-list">${memberRows || "<p>No roster members registered yet.</p>"}</div>${addForm}</article>`;
       }).join("")}</div>
     </section>`;
@@ -895,7 +960,7 @@ function renderHeadToHead(league) {
     <div class="section-heading"><div><h2>Head-to-head comparison</h2><p>Compare event results between teams or players.</p></div>${liveDataMode ? "" : '<span class="sample-tag">SAMPLE</span>'}</div>
     <div class="h2h-mode-switch" role="group" aria-label="Comparison type"><button type="button" class="active" data-h2h-mode="teams" aria-pressed="true">Team vs team</button><button type="button" data-h2h-mode="players" aria-pressed="false">Player vs player</button></div>
     <div class="h2h-panel" data-h2h-panel="teams">
-      <div class="compare-controls"><label class="field-label">Team A<select id="compare-team-a">${teams.map((team) => `<option>${escapeHTML(team)}</option>`).join("")}</select></label><span>VS</span><label class="field-label">Team B<select id="compare-team-b">${teams.map((team, index) => `<option ${index === 1 ? "selected" : ""}>${escapeHTML(team)}</option>`).join("")}</select></label></div>
+      <div class="compare-controls"><label class="field-label">Team A<select id="compare-team-a">${teams.map((team) => `<option ${team === first ? "selected" : ""}>${escapeHTML(team)}</option>`).join("")}</select></label><span>VS</span><label class="field-label">Team B<select id="compare-team-b">${teams.map((team) => `<option ${team === second ? "selected" : ""}>${escapeHTML(team)}</option>`).join("")}</select></label></div>
       <div class="compare-score-card" id="compare-results"><div><strong id="compare-name-a">${escapeHTML(first)}</strong><span>Series wins</span></div><b id="compare-score">${winsA} : ${winsB}</b><div><strong id="compare-name-b">${escapeHTML(second)}</strong><span>Series wins</span></div></div>
       <div class="compare-match-list" id="compare-match-list">${renderComparedMatches(matches)}</div>
     </div>
@@ -1012,7 +1077,9 @@ function renderTournamentPage() {
       ? `<form class="tournament-edit-form" data-edit-tournament="${escapeHTML(tournament)}">
           <label>Tournament name<input name="name" required maxlength="80" value="${escapeHTML(tournament)}" /></label>
           <label class="checkbox-field"><input name="globalBanPick" type="checkbox" ${config.globalBanPick ? "checked" : ""} /> Global Ban & Pick</label>
-          <label class="checkbox-field"><input name="playoffsEnabled" type="checkbox" ${config.playoffsEnabled ? "checked" : ""} /> Include playoffs (with Play-ins)</label>
+          <label class="checkbox-field"><input name="playoffsEnabled" type="checkbox" ${config.playoffsEnabled ? "checked" : ""} /> Include playoffs</label>
+          <label>Playoff format<select name="bracketFormat"><option value="double-elimination" ${config.bracketFormat !== "single-elimination" ? "selected" : ""}>Double elimination</option><option value="single-elimination" ${config.bracketFormat === "single-elimination" ? "selected" : ""}>Single elimination</option></select></label>
+          <label class="checkbox-field"><input name="playInEnabled" type="checkbox" ${config.playInEnabled ? "checked" : ""} /> Include Play-In stage</label>
           <button type="submit" class="button button-secondary">Save tournament</button>
           <button type="button" class="danger-button" data-delete-tournament="${escapeHTML(tournament)}" ${Object.values(matchDetails).some((match) => match.league === tournament) || [...teamRosters.keys()].some((key) => key.startsWith(`${tournament}|`) && teamRosters.get(key).length) ? "disabled title=\"Remove roster and match history before deleting this tournament.\"" : ""}>Delete tournament</button>
         </form>
@@ -1023,7 +1090,10 @@ function renderTournamentPage() {
           <button type="submit" class="button button-primary">Add participant</button>
         </form>`
       : `<p class="module-footnote">Unlock admin tools to edit tournament settings and participants.</p>`;
-    return `<article class="content-card tournament-card"><header class="section-heading"><div><h2>${escapeHTML(tournament)}</h2><p>${config?.playoffsEnabled ? "Group Stage · Playoffs including Play-ins" : "Group Stage only"} · ${config?.globalBanPick ? "Global Ban & Pick" : "Standard draft"} · ${(config?.participants || []).length} participants</p></div>${liveDataMode ? "" : `<span class="sample-tag">${hasAdminAccess ? "ADMIN" : "SAMPLE"}</span>`}</header>
+    const playoffDescription = config?.playoffsEnabled
+      ? `${config.bracketFormat === "single-elimination" ? "Single elimination" : "Double elimination"}${config.playInEnabled ? " · Play-in" : ""}`
+      : "Group Stage only";
+    return `<article class="content-card tournament-card"><header class="section-heading"><div><h2>${escapeHTML(tournament)}</h2><p>${escapeHTML(playoffDescription)} · ${config?.globalBanPick ? "Global Ban & Pick" : "Standard draft"} · ${(config?.participants || []).length} participants</p></div>${liveDataMode ? "" : `<span class="sample-tag">${hasAdminAccess ? "ADMIN" : "SAMPLE"}</span>`}</header>
       ${fields}
       <div class="module-table-wrap"><table class="module-table participant-table"><thead><tr><th>TEAM</th><th>ABBR</th><th>QUALIFICATION ROUTE</th><th>HISTORY</th><th></th></tr></thead><tbody>${teamRows || '<tr><td colspan="5">No participants added yet.</td></tr>'}</tbody></table></div>
     </article>`;
@@ -1034,7 +1104,9 @@ function renderTournamentPage() {
     ? `<form id="create-tournament-form" class="tournament-create-form">
         <label>Tournament name<input name="name" required maxlength="80" placeholder="e.g. HOK Spring Cup" /></label>
         <label class="checkbox-field"><input name="globalBanPick" type="checkbox" /> Global Ban & Pick</label>
-        <label class="checkbox-field"><input name="playoffsEnabled" type="checkbox" checked /> Include playoffs (with Play-ins)</label>
+        <label class="checkbox-field"><input name="playoffsEnabled" type="checkbox" checked /> Include playoffs</label>
+        <label>Playoff format<select name="bracketFormat"><option value="double-elimination" selected>Double elimination</option><option value="single-elimination">Single elimination</option></select></label>
+        <label class="checkbox-field"><input name="playInEnabled" type="checkbox" /> Include Play-In stage</label>
         <button type="submit" class="button button-primary">Create tournament</button>
       </form>`
     : `<div class="management-actions"><p>Admin access is required to create tournaments or edit participants.</p><button type="button" class="button button-secondary" data-unlock-tournaments>Unlock admin tools</button></div>`;
@@ -1042,7 +1114,7 @@ function renderTournamentPage() {
     <section class="content-card module-card"><div class="section-heading"><div><h2>Competition setup</h2><p>1. Create a tournament · 2. Register teams and qualification routes · 3. Add each team’s event roster · 4. Record matches.</p></div><span class="sample-tag">EVENT SETUP</span></div>${createForm}</section>
     <div class="module-content tournament-list">${tournamentCards}</div>
     <details class="content-card tournament-help"><summary>How to add, edit, and delete tournaments or teams</summary><ol>
-      <li>Unlock admin tools, enter the tournament name, choose whether the tournament includes playoffs and Play-ins, and enable Global Ban & Pick if it applies.</li>
+      <li>Unlock admin tools, enter the tournament name, choose whether playoffs are single- or double-elimination, and enable Play-In if the event uses it.</li>
       <li>In that tournament card, add every participating team. Enter its abbreviation manually and select its entry route.</li>
       <li>To rename or change tournament settings, edit the tournament and save. Rename is blocked when roster or match history already refers to the tournament.</li>
       <li>Use Remove on a participant only before it has match history. A tournament with match history cannot be deleted, protecting results.</li>
@@ -1064,7 +1136,14 @@ function bindTournamentControls() {
     }
     leagueOptions.push(name);
     leagueTeams[name] = [];
-    tournamentSettings[name] = { id: name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""), globalBanPick: form.elements.namedItem("globalBanPick").checked, playoffsEnabled: form.elements.namedItem("playoffsEnabled").checked, participants: [] };
+    tournamentSettings[name] = {
+      id: name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+      globalBanPick: form.elements.namedItem("globalBanPick").checked,
+      playoffsEnabled: form.elements.namedItem("playoffsEnabled").checked,
+      bracketFormat: form.elements.namedItem("bracketFormat").value,
+      playInEnabled: form.elements.namedItem("playInEnabled").checked,
+      participants: []
+    };
     if (productionDatabaseAdapter?.canWrite) {
       try {
         await persistTournamentChanges();
@@ -1093,6 +1172,8 @@ function bindTournamentControls() {
     const config = tournamentSettings[oldName];
     config.globalBanPick = form.elements.namedItem("globalBanPick").checked;
     config.playoffsEnabled = form.elements.namedItem("playoffsEnabled").checked;
+    config.bracketFormat = form.elements.namedItem("bracketFormat").value;
+    config.playInEnabled = form.elements.namedItem("playInEnabled").checked;
     if (newName !== oldName) {
       const teams = leagueTeams[oldName];
       leagueOptions[leagueOptions.indexOf(oldName)] = newName;
@@ -1451,6 +1532,8 @@ function bindCompareControls(league) {
   };
   document.querySelector("#compare-player-a").addEventListener("change", updatePlayers);
   document.querySelector("#compare-player-b").addEventListener("change", updatePlayers);
+  update();
+  updatePlayers();
   document.querySelectorAll("[data-h2h-mode]").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll("[data-h2h-mode]").forEach((tab) => {
       const active = tab === button;
@@ -1665,6 +1748,7 @@ function openModal(matchId = "") {
     document.querySelector("#entry-team-a").value = match.teamA;
     document.querySelector("#entry-team-b").value = match.teamB;
     document.querySelector("#entry-phase").value = match.phase === "Playoffs" ? "Playoffs" : "Group Stage";
+    syncEntryStageOptions(match.league);
     document.querySelector("#entry-stage").value = match.stage === match.phase ? "" : match.stage;
     document.querySelector("#entry-status").value = match.finished ? "Completed" : "Scheduled";
     document.querySelector("#entry-status option[value='Scheduled']").disabled = !!match.finished;
@@ -1736,6 +1820,15 @@ function syncEntryPhaseOptions(tournament) {
   if (playoffOption?.disabled && document.querySelector("#entry-phase").value === "Playoffs") {
     document.querySelector("#entry-phase").value = "Group Stage";
   }
+  syncEntryStageOptions(tournament);
+}
+
+function syncEntryStageOptions(tournament) {
+  const stageList = document.querySelector("#entry-stage-options");
+  if (!stageList) return;
+  const isPlayoffs = document.querySelector("#entry-phase").value === "Playoffs";
+  const stages = isPlayoffs ? getPlayoffStageOptions(tournament) : ["Group Stage"];
+  stageList.innerHTML = stages.map((stage) => `<option value="${escapeHTML(stage)}"></option>`).join("");
 }
 
 function syncEntryTeamOptions() {
@@ -1981,13 +2074,15 @@ function buildEntryPreviewMatch() {
   const formattedDate = rawDate
     ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dateFromISO(rawDate))
     : "";
+  const stage = document.querySelector("#entry-stage").value.trim() || document.querySelector("#entry-phase").value;
+  const phase = document.querySelector("#entry-phase").value === "Playoffs" || isPlayoffStage(stage) ? "Playoffs" : "Group Stage";
   return {
     league: document.querySelector("#entry-league").value,
     teamA, teamB, scoreA: isCompleted ? scoreA : null, scoreB: isCompleted ? scoreB : null,
     status: isCompleted ? "Completed" : "Scheduled",
     format: document.querySelector("#entry-format").value,
-    phase: document.querySelector("#entry-phase").value,
-    stage: document.querySelector("#entry-stage").value.trim() || document.querySelector("#entry-phase").value,
+    phase,
+    stage,
     time: document.querySelector("#entry-time").value,
     streamUrl: document.querySelector("#entry-stream").value.trim(),
     tournamentId: document.querySelector("#entry-league").value,
@@ -2203,6 +2298,9 @@ document.querySelector("#entry-league").addEventListener("change", () => {
   const tournament = document.querySelector("#entry-league").value;
   syncEntryPhaseOptions(tournament);
   syncEntryTeamOptions();
+});
+document.querySelector("#entry-phase").addEventListener("change", () => {
+  syncEntryStageOptions(document.querySelector("#entry-league").value);
 });
 document.querySelector("#entry-game-tabs").addEventListener("click", (event) => {
   const tab = event.target.closest("[data-entry-game]");
