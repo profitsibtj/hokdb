@@ -87,10 +87,11 @@ export interface ScheduleEntry {
 export interface LeaguePreset {
   id: string;
   name: string;
-  defaultFormat: MatchFormat;
+  defaultFormat?: MatchFormat;
   fearlessDraft: boolean;
   teamsText: string;
   teamAbbreviations?: Record<string, string>;
   teamQualifications?: Record<string, string>;
+  playoffsEnabled?: boolean;
   brackets?: unknown[];
 }

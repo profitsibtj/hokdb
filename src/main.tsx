@@ -48,9 +48,7 @@ type PreviewMatch = {
   games: PreviewGame[];
 };
 
-type TournamentData = Omit<LeaguePreset, "defaultFormat"> & {
-  defaultFormat: string;
-};
+type TournamentData = Omit<LeaguePreset, "defaultFormat">;
 
 type DatabaseRosterRow = {
   id: string | number;
@@ -285,13 +283,7 @@ const productionAdapter = {
       if (schedule.id) await clientDb.updateSchedule(schedule.id, schedule);
     }
   },
-  saveTournaments: async (tournaments: TournamentData[]) => {
-    const presets: LeaguePreset[] = tournaments.map((tournament) => ({
-      ...tournament,
-      defaultFormat: formatMap[tournament.defaultFormat] || "Bo5",
-    }));
-    await clientDb.saveLeaguePresets(presets);
-  },
+  saveTournaments: async (tournaments: TournamentData[]) => clientDb.saveLeaguePresets(tournaments),
 };
 
 async function startRedesign() {
