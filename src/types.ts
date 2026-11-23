@@ -1,4 +1,4 @@
-export type LanePosition = "Clash Lane" | "Jungle" | "Mid Lane" | "Farm Lane" | "Roam" | "Flex";
+export type LanePosition = "Clash Lane" | "Jungle" | "Mid Lane" | "Farm Lane" | "Roam" | "Fill" | "Flex";
 export type StaffRole = "Coach" | "Analyst" | "Manager";
 export type MatchFormat = "Bo1" | "Bo3" | "Bo5" | "Bo7";
 export type Side = "A" | "B";
@@ -58,7 +58,9 @@ export interface Match {
 export interface RosterPlayer {
   id?: string;
   name: string;
-  position: LanePosition | StaffRole | "Substitute";
+  position: LanePosition | StaffRole;
+  secondaryPosition?: LanePosition;
+  isSubstitute?: boolean;
   team: string;
   league: string;
   previousNames?: string[];

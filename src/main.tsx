@@ -2,7 +2,7 @@ import uiDocument from "./ui/index.html?raw";
 import "./ui/styles.css";
 import { accessApi, restoreAccessSession, signInWithPassword, signOut } from "./accessClient";
 import { clientDb } from "./dataClient";
-import type { Game, GameObjectives, LeaguePreset, Match, MatchFormat, RosterPlayer, ScheduleEntry } from "./types";
+import type { Game, GameObjectives, LanePosition, LeaguePreset, Match, MatchFormat, RosterPlayer, ScheduleEntry } from "./types";
 
 const gmt7OffsetMs = 7 * 60 * 60 * 1000;
 
@@ -74,6 +74,8 @@ type DatabaseRosterRow = {
   team: string;
   name?: string;
   position?: unknown;
+  secondary_position?: unknown;
+  is_substitute?: unknown;
   real_name?: string;
   previous_names?: unknown;
 };
@@ -89,13 +91,23 @@ function isDatabaseRosterRow(value: unknown): value is DatabaseRosterRow {
 }
 
 function isRosterPosition(value: unknown): value is RosterPlayer["position"] {
-  return ["Clash Lane", "Jungle", "Mid Lane", "Farm Lane", "Roam", "Flex", "Substitute", "Coach", "Analyst", "Manager"].includes(String(value));
+  return ["Clash Lane", "Jungle", "Mid Lane", "Farm Lane", "Roam", "Fill", "Flex", "Coach", "Analyst", "Manager"].includes(String(value));
+}
+
+function isLanePosition(value: unknown): value is LanePosition {
+  return ["Clash Lane", "Jungle", "Mid Lane", "Farm Lane", "Roam", "Fill", "Flex"].includes(String(value));
 }
 
 function getRosterPosition(value: unknown): RosterPlayer["position"] {
-  if (value === undefined || value === null || value === "") return "Substitute";
+  if (value === "Substitute" || value === "Flex" || value === undefined || value === null || value === "") return "Fill";
   if (!isRosterPosition(value)) throw new Error(`Unsupported roster role in Supabase: ${String(value)}`);
   return value;
+}
+
+function getSecondaryPosition(value: unknown): RosterPlayer["secondaryPosition"] {
+  if (value === undefined || value === null || value === "") return undefined;
+  const position = getRosterPosition(value);
+  return isLanePosition(position) ? position : undefined;
 }
 
 function getPreviousNames(value: unknown): string[] {
@@ -275,13 +287,17 @@ const productionAdapter = {
     await clientDb.deleteMatch(matchId);
     if (linkedSchedule?.id) await clientDb.deleteSchedule(linkedSchedule.id);
   },
-  saveRoster: async (player: { id?: string; name: string; identity: string; role: string; tournament: string; team: string }) => {
+  saveRoster: async (player: { id?: string; name: string; identity: string; role: string; secondaryRole?: string; isSubstitute?: boolean; tournament: string; team: string }) => {
     if (!isRosterPosition(player.role)) throw new Error(`Unsupported roster role: ${player.role}`);
+    const secondaryPosition = getSecondaryPosition(player.secondaryRole);
+    if (secondaryPosition === player.role) throw new Error("Second role must be different from the primary role.");
     const record: RosterPlayer = {
       ...(player.id ? { id: player.id } : {}),
       name: player.name,
       realName: player.identity,
       position: player.role,
+      secondaryPosition,
+      isSubstitute: !!player.isSubstitute,
       league: player.tournament,
       team: player.team,
     };
@@ -299,6 +315,8 @@ const productionAdapter = {
         id: String(row.id),
         name: row.name || "",
         position: getRosterPosition(row.position),
+        secondaryPosition: getSecondaryPosition(row.secondary_position),
+        isSubstitute: row.position === "Substitute" || row.is_substitute === true,
         team: newName,
         league: tournament,
         realName: row.real_name || "",

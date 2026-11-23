@@ -35,6 +35,8 @@ const mapMatchToDb = (data: Match) => ({
 const mapRosterToDb = (player: RosterPlayer) => ({
   name: player.name || "",
   position: player.position || null,
+  secondary_position: player.secondaryPosition || null,
+  is_substitute: !!player.isSubstitute,
   team: player.team || null,
   league: player.league || null,
   previous_names: player.previousNames || [],

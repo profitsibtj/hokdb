@@ -33,6 +33,16 @@ const teamRosters = new Map();
 const qualificationRoutes = ["Open Qualifier", "Invited", "Wildcard", "Closed Qualifier", "Group Stage"];
 
 const lanes = ["Clash Lane", "Jungle", "Mid Lane", "Farm Lane", "Roam"];
+const playerRoles = [...lanes, "Fill"];
+const rosterRoles = [...playerRoles, "Coach", "Analyst", "Manager"];
+const laneIconKeys = {
+  "Clash Lane": "clash",
+  Jungle: "jungle",
+  "Mid Lane": "mid",
+  "Farm Lane": "farm",
+  Roam: "roam",
+  Fill: "fill",
+};
 const heroOptions = [...new Set([
   "Allain", "Angela", "Arli", "Augran", "Biron", "Charlotte", "Consort Yu", "Da Qiao",
   "Daji", "Dharma", "Dolia", "Dyadia", "Gan & Mo", "Garo", "Guiguzi", "Hou Yi", "Jing",
@@ -44,6 +54,46 @@ const heroOptions = [...new Set([
   "Liu Bang", "Zhou Yu", "Dian Wei", "Xiahou Dun", "Lady Sun", "Ming", "Sima Yi",
   "Zhang Liang", "Zhang Fei", "Donghuang", "Yaria", "Lam", "Dolia", "Augran",
 ])].sort();
+
+function renderLaneLabel(lane, short = false) {
+  const label = short ? String(lane).replace(" Lane", "") : String(lane);
+  const iconKey = laneIconKeys[lane];
+  if (!iconKey) return escapeHTML(label);
+  return `<span class="lane-label"><span class="lane-icon lane-icon-${iconKey}" aria-hidden="true"></span><span>${escapeHTML(label)}</span></span>`;
+}
+
+function normalizeRosterRole(role) {
+  if (role === "Substitute" || role === "Flex") return "Fill";
+  return rosterRoles.includes(role) ? role : "Fill";
+}
+
+function normalizeSecondaryRole(role, primaryRole) {
+  const normalized = role === "Flex" ? "Fill" : role;
+  return playerRoles.includes(normalized) && normalized !== primaryRole ? normalized : "";
+}
+
+function renderRoleOptions(selectedRole, includeStaff = true) {
+  const options = includeStaff ? rosterRoles : playerRoles;
+  return options.map((role) => `<option value="${escapeHTML(role)}" ${role === selectedRole ? "selected" : ""}>${escapeHTML(role)}</option>`).join("");
+}
+
+function renderSecondaryRoleOptions(selectedRole = "", primaryRole = "") {
+  return `<option value="">No second role</option>${playerRoles.map((role) => `<option value="${escapeHTML(role)}" ${role === selectedRole ? "selected" : ""} ${role === primaryRole ? "disabled" : ""}>${escapeHTML(role)}</option>`).join("")}`;
+}
+
+function canPlayLane(player, lane) {
+  return player.role === lane || player.secondaryRole === lane || player.role === "Fill" || player.secondaryRole === "Fill";
+}
+
+function findRosterPlayerForLane(roster, lane, usedIds = new Set()) {
+  const available = roster.filter((player) => !usedIds.has(player.id) && canPlayLane(player, lane));
+  return available.find((player) => !player.isSubstitute && player.role === lane)
+    || available.find((player) => !player.isSubstitute && player.secondaryRole === lane)
+    || available.find((player) => !player.isSubstitute)
+    || available.find((player) => player.role === lane)
+    || available.find((player) => player.secondaryRole === lane)
+    || available[0];
+}
 
 function calculatePlayerKp(players, player) {
   const teamKills = players.reduce((total, entry) => total + (Number(entry.kills) || 0), 0);
@@ -267,10 +317,14 @@ function applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows
     const team = row.team || "Unassigned team";
     const key = rosterKey(tournament, team);
     const members = nextRosters.get(key) || [];
+    const legacySubstitute = row.position === "Substitute";
+    const role = normalizeRosterRole(row.position);
     members.push({
       id: String(row.id),
       name: row.name || "Unknown player",
-      role: row.position || "Substitute",
+      role,
+      secondaryRole: normalizeSecondaryRole(row.secondary_position, role),
+      isSubstitute: legacySubstitute || row.is_substitute === true,
       identity: row.real_name || "",
     });
     nextRosters.set(key, members);
@@ -735,7 +789,7 @@ function renderPlayerStats(league) {
       <tbody>${players.map((player, index) => {
         const values = columns.map((column) => String(valueFor(player, column.key)));
         const valueAttributes = values.map((value, columnIndex) => ` data-filter-value="${escapeHTML(value.toLowerCase())}" data-filter-column="${columns[columnIndex].key}"`);
-        return `<tr class="player-stat-row"><td${valueAttributes[0]}><span class="player-rank">${String(index + 1).padStart(2, "0")}</span><strong class="module-team-name">${escapeHTML(player.name)}</strong><small class="table-sub">${escapeHTML(player.lane)}</small></td><td${valueAttributes[1]}>${escapeHTML(player.teamLabel)}</td><td${valueAttributes[2]}>${player.games}</td><td${valueAttributes[3]}>${player.kdaLine}</td><td${valueAttributes[4]}><strong>${player.kda}</strong></td><td${valueAttributes[5]}>${player.kp}%</td><td${valueAttributes[6]}>${player.goldAverage.toLocaleString("en-US")}</td><td${valueAttributes[7]}>${player.damageAverage.toLocaleString("en-US")}</td><td${valueAttributes[8]}>${player.damageTakenAverage.toLocaleString("en-US")}</td>${[1, 2, 3, 4, 5].map((count, offset) => `<td${valueAttributes[9 + offset]}>${player[`multi${count}`]}</td>`).join("")}<td${valueAttributes[14]}>${player.mvp}</td><td${valueAttributes[15]}>${player.firstBlood}</td></tr>`;
+        return `<tr class="player-stat-row"><td${valueAttributes[0]}><span class="player-rank">${String(index + 1).padStart(2, "0")}</span><strong class="module-team-name">${escapeHTML(player.name)}</strong><small class="table-sub">${renderLaneLabel(player.lane)}</small></td><td${valueAttributes[1]}>${escapeHTML(player.teamLabel)}</td><td${valueAttributes[2]}>${player.games}</td><td${valueAttributes[3]}>${player.kdaLine}</td><td${valueAttributes[4]}><strong>${player.kda}</strong></td><td${valueAttributes[5]}>${player.kp}%</td><td${valueAttributes[6]}>${player.goldAverage.toLocaleString("en-US")}</td><td${valueAttributes[7]}>${player.damageAverage.toLocaleString("en-US")}</td><td${valueAttributes[8]}>${player.damageTakenAverage.toLocaleString("en-US")}</td>${[1, 2, 3, 4, 5].map((count, offset) => `<td${valueAttributes[9 + offset]}>${player[`multi${count}`]}</td>`).join("")}<td${valueAttributes[14]}>${player.mvp}</td><td${valueAttributes[15]}>${player.firstBlood}</td></tr>`;
       }).join("")}</tbody>
     </table></div>
   </section>`;
@@ -795,13 +849,20 @@ function renderRoster(league) {
         const qualificationRoute = tournamentSettings[tournament]?.participants
           .find((participant) => participant.team === team)?.route || "Route not set";
         const memberRows = members.map((player) => {
-          const roleLabel = player.lane === "Substitute" ? "SUBS" : player.lane.replace(" Lane", "");
-          return `<div><span class="roster-role ${player.lane === "Substitute" ? "roster-role-sub" : ""}">${escapeHTML(roleLabel)}</span><strong title="${escapeHTML(player.identity || player.id)}">${escapeHTML(player.name)}${player.identity ? ` <small>· ${escapeHTML(player.identity)}</small>` : ""}</strong>${canEdit ? `<button type="button" class="roster-edit-toggle" data-toggle-roster-edit="${escapeHTML(player.id)}" aria-expanded="false">Edit</button><button type="button" class="danger-button" data-remove-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}">Remove</button><form class="roster-edit-form" data-edit-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}" hidden><label>Nickname<input name="name" required maxlength="40" value="${escapeHTML(player.name)}" /></label><label>Identity note<input name="identity" maxlength="60" value="${escapeHTML(player.identity || "")}" /></label><label>Role<select name="role">${[...lanes, "Substitute", "Coach", "Analyst"].map((role) => `<option ${player.lane === role ? "selected" : ""}>${escapeHTML(role)}</option>`).join("")}</select></label><button type="submit" class="button button-secondary">Save player</button></form>` : ""}</div>`;
+          const primaryRole = normalizeRosterRole(player.lane);
+          const secondaryRole = normalizeSecondaryRole(player.secondaryRole, primaryRole);
+          const secondaryLabel = secondaryRole
+            ? `<small class="roster-secondary-role"><b>2ND</b>${renderLaneLabel(secondaryRole, true)}</small>`
+            : "";
+          const statusBadge = player.isSubstitute ? '<small class="roster-status-sub">SUBS</small>' : "";
+          return `<div class="roster-player-row"><span class="roster-role">${renderLaneLabel(primaryRole, true)}${secondaryLabel}</span><strong title="${escapeHTML(player.identity || player.id)}"><span>${escapeHTML(player.name)}${player.identity ? ` <small>· ${escapeHTML(player.identity)}</small>` : ""}</span>${statusBadge}</strong>${canEdit ? `<button type="button" class="roster-edit-toggle" data-toggle-roster-edit="${escapeHTML(player.id)}" aria-expanded="false">Edit</button><button type="button" class="danger-button" data-remove-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}">Remove</button><form class="roster-edit-form" data-edit-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}" hidden><label>Nickname<input name="name" required maxlength="40" value="${escapeHTML(player.name)}" /></label><label>Identity note<input name="identity" maxlength="60" value="${escapeHTML(player.identity || "")}" /></label><label>Primary role<select name="role">${renderRoleOptions(primaryRole)}</select></label><label><span>Second role <small>Optional</small></span><select name="secondaryRole">${renderSecondaryRoleOptions(secondaryRole, primaryRole)}</select></label><label>Roster status<select name="status"><option value="starter" ${player.isSubstitute ? "" : "selected"}>Starter</option><option value="substitute" ${player.isSubstitute ? "selected" : ""}>Substitute</option></select></label><button type="submit" class="button button-secondary">Save player</button></form>` : ""}</div>`;
         }).join("");
         const addForm = canEdit ? `<form class="roster-add-form" data-add-roster="${escapeHTML(tournament)}" data-roster-team="${escapeHTML(team)}">
           <label>Nickname<input name="name" required maxlength="40" placeholder="Player nickname" /></label>
           <label>Identity note<input name="identity" maxlength="60" placeholder="Optional distinguisher" /></label>
-          <label>Role<select name="role">${[...lanes, "Substitute", "Coach", "Analyst"].map((role) => `<option>${escapeHTML(role)}</option>`).join("")}</select></label>
+          <label>Primary role<select name="role">${renderRoleOptions(lanes[0])}</select></label>
+          <label><span>Second role <small>Optional</small></span><select name="secondaryRole">${renderSecondaryRoleOptions("", lanes[0])}</select></label>
+          <label>Roster status<select name="status"><option value="starter">Starter</option><option value="substitute">Substitute</option></select></label>
           <button type="submit" class="button button-secondary">Add to roster</button>
         </form>` : "";
         return `<article class="roster-team-card"><header><span class="team-monogram">${escapeHTML(getTeamAbbreviation(tournament, team))}</span><div><strong>${escapeHTML(team)}</strong><span class="roster-card-meta"><small>${escapeHTML(tournament)} · ${members.length} roster members</small><span class="roster-route">${escapeHTML(qualificationRoute)}</span></span></div></header>
@@ -1179,14 +1240,48 @@ function bindTournamentControls() {
   }));
 }
 
+function syncRosterRoleFields(form) {
+  const roleSelect = form.elements.namedItem("role");
+  const secondarySelect = form.elements.namedItem("secondaryRole");
+  const statusSelect = form.elements.namedItem("status");
+  if (!roleSelect || !secondarySelect || !statusSelect) return;
+  const isPlayer = playerRoles.includes(roleSelect.value);
+  secondarySelect.disabled = !isPlayer;
+  statusSelect.disabled = !isPlayer;
+  [...secondarySelect.options].forEach((option) => {
+    option.disabled = !!option.value && option.value === roleSelect.value;
+  });
+  if (!isPlayer || secondarySelect.value === roleSelect.value) secondarySelect.value = "";
+  if (!isPlayer) statusSelect.value = "starter";
+}
+
+function getRosterFormRoles(form) {
+  const role = form.elements.namedItem("role").value;
+  const isPlayer = playerRoles.includes(role);
+  const secondaryRole = isPlayer ? form.elements.namedItem("secondaryRole").value : "";
+  return {
+    role,
+    secondaryRole,
+    isSubstitute: isPlayer && form.elements.namedItem("status").value === "substitute",
+  };
+}
+
 function bindRosterManagement() {
+  document.querySelectorAll(".roster-add-form, .roster-edit-form").forEach((form) => {
+    syncRosterRoleFields(form);
+    form.elements.namedItem("role")?.addEventListener("change", () => syncRosterRoleFields(form));
+  });
   document.querySelectorAll("[data-add-roster]").forEach((form) => form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const tournament = form.dataset.addRoster;
     const team = form.dataset.rosterTeam;
     const name = form.elements.namedItem("name").value.trim();
     const identity = form.elements.namedItem("identity").value.trim();
-    const role = form.elements.namedItem("role").value;
+    const { role, secondaryRole, isSubstitute } = getRosterFormRoles(form);
+    if (secondaryRole === role) {
+      showToast("Second role must be different from the primary role.");
+      return;
+    }
     const members = getTeamRoster(tournament, team);
     const sameNameAndRole = members.filter((member) => member.name.toLowerCase() === name.toLowerCase() && member.role === role);
     if (sameNameAndRole.length && (!identity || sameNameAndRole.some((member) => member.identity?.toLowerCase() === identity.toLowerCase()))) {
@@ -1194,7 +1289,7 @@ function bindRosterManagement() {
       return;
     }
     try {
-      await productionDatabaseAdapter.saveRoster({ name, identity, role, tournament, team });
+      await productionDatabaseAdapter.saveRoster({ name, identity, role, secondaryRole, isSubstitute, tournament, team });
       await finishDatabaseWrite("Roster member saved to Supabase.");
     } catch (error) {
       await showDatabaseWriteError("Roster member", error);
@@ -1213,7 +1308,11 @@ function bindRosterManagement() {
     const team = form.dataset.rosterTeam;
     const name = form.elements.namedItem("name").value.trim();
     const identity = form.elements.namedItem("identity").value.trim();
-    const role = form.elements.namedItem("role").value;
+    const { role, secondaryRole, isSubstitute } = getRosterFormRoles(form);
+    if (secondaryRole === role) {
+      showToast("Second role must be different from the primary role.");
+      return;
+    }
     const members = getTeamRoster(tournament, team);
     const duplicate = members.some((member) => member.id !== id && member.name.toLowerCase() === name.toLowerCase() && member.role === role
       && (!identity || member.identity?.toLowerCase() === identity.toLowerCase()));
@@ -1222,7 +1321,7 @@ function bindRosterManagement() {
       return;
     }
     try {
-      await productionDatabaseAdapter.saveRoster({ id, name, identity, role, tournament, team });
+      await productionDatabaseAdapter.saveRoster({ id, name, identity, role, secondaryRole, isSubstitute, tournament, team });
       await finishDatabaseWrite("Roster member updated in Supabase.");
     } catch (error) {
       await showDatabaseWriteError("Roster member", error);
@@ -1512,8 +1611,8 @@ function openModal(matchId = "") {
       bansB: [...(game.bansB || [])],
       objectivesA: { Tyrant: 0, "Shadow Tyrant": 0, Tempest: 0, Overlord: 0, "Shadow Overlord": 0, Towers: 0, ...(game.objectivesA || {}) },
       objectivesB: { Tyrant: 0, "Shadow Tyrant": 0, Tempest: 0, Overlord: 0, "Shadow Overlord": 0, Towers: 0, ...(game.objectivesB || {}) },
-      picksA: game.playersA.map((player) => ({ ...player, playerId: player.playerId || getTeamRoster(match.league, match.teamA).find((member) => member.name === player.player && member.role === player.lane)?.id || "", multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, ...(player.multiKills || {}) } })),
-      picksB: game.playersB.map((player) => ({ ...player, playerId: player.playerId || getTeamRoster(match.league, match.teamB).find((member) => member.name === player.player && member.role === player.lane)?.id || "", multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, ...(player.multiKills || {}) } })),
+      picksA: game.playersA.map((player) => ({ ...player, playerId: player.playerId || getTeamRoster(match.league, match.teamA).find((member) => member.name === player.player && canPlayLane(member, player.lane))?.id || "", multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, ...(player.multiKills || {}) } })),
+      picksB: game.playersB.map((player) => ({ ...player, playerId: player.playerId || getTeamRoster(match.league, match.teamB).find((member) => member.name === player.player && canPlayLane(member, player.lane))?.id || "", multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, ...(player.multiKills || {}) } })),
     }));
     document.querySelector("#modal-title").textContent = "Edit match";
     updateEntryPrimaryAction();
@@ -1669,14 +1768,21 @@ function createBlankEntryGame(index) {
   const { teamA, teamB } = selectedTeamNames();
   const rosterA = getTeamRoster(tournament, teamA);
   const rosterB = getTeamRoster(tournament, teamB);
-  const createPicks = (roster) => lanes.map((lane) => ({
-    playerId: roster.find((player) => player.role === lane)?.id || "",
-    lane,
-    hero: "",
-    player: roster.find((player) => player.role === lane)?.name || "",
-    kills: 0, deaths: 0, assists: 0, gold: 0, damage: 0, damageTaken: 0,
-    multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, mvp: false, firstBlood: false
-  }));
+  const createPicks = (roster) => {
+    const usedIds = new Set();
+    return lanes.map((lane) => {
+      const player = findRosterPlayerForLane(roster, lane, usedIds);
+      if (player?.id) usedIds.add(player.id);
+      return {
+        playerId: player?.id || "",
+        lane,
+        hero: "",
+        player: player?.name || "",
+        kills: 0, deaths: 0, assists: 0, gold: 0, damage: 0, damageTaken: 0,
+        multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, mvp: false, firstBlood: false
+      };
+    });
+  };
   return {
     winner: "",
     duration: "",
@@ -1785,10 +1891,13 @@ function renderEntryGamePanel() {
   const winnerOptions = `<option value="">Not played</option><option value="${escapeHTML(teamA)}" ${game.winner === teamA ? "selected" : ""}>${escapeHTML(teamA)}</option><option value="${escapeHTML(teamB)}" ${game.winner === teamB ? "selected" : ""}>${escapeHTML(teamB)}</option>`;
   const renderPlayerTable = (side, team) => `<div class="entry-team-stats"><h3>${escapeHTML(team)} · ${side === game.blueSide ? "BLUE SIDE" : "RED SIDE"}</h3><div class="entry-stats-scroll"><table class="entry-stats-table"><thead><tr><th>ROLE</th><th>PLAYER</th><th>HERO</th><th>K</th><th>D</th><th>A</th><th>GOLD</th><th title="Hero damage">DMG</th><th title="Damage taken">TAKEN</th><th>KP</th><th>1K</th><th>2K</th><th>3K</th><th>4K</th><th>5K</th><th>MVP</th><th title="First Blood">FB</th></tr></thead><tbody>${lanes.map((lane, index) => {
     const pick = game[`picks${side}`][index];
-    const roster = getTeamRoster(document.querySelector("#entry-league").value, team).filter((player) => player.role === lane);
+    const roster = getTeamRoster(document.querySelector("#entry-league").value, team).filter((player) => canPlayLane(player, lane));
     const playerListId = `entry-player-options-${side}-${index}`;
-    const playerOptions = roster.map((player) => `<option value="${escapeHTML(player.name)}" label="${escapeHTML(player.identity || player.role)}"></option>`).join("");
-    return `<tr><th scope="row">${escapeHTML(lane.replace(" Lane", ""))}</th>
+    const playerOptions = roster.map((player) => {
+      const roleNote = [player.role, player.secondaryRole, player.isSubstitute ? "SUBS" : ""].filter(Boolean).join(" · ");
+      return `<option value="${escapeHTML(player.name)}" label="${escapeHTML(player.identity ? `${player.identity} · ${roleNote}` : roleNote)}"></option>`;
+    }).join("");
+    return `<tr><th scope="row">${renderLaneLabel(lane, true)}</th>
       <td><input list="${playerListId}" autocomplete="off" placeholder="Type player" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} player" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="player" value="${escapeHTML(pick.player || "")}" /><datalist id="${playerListId}">${playerOptions}</datalist></td>
       <td><input list="entry-hero-options" autocomplete="off" placeholder="Type hero" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} hero" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="hero" value="${escapeHTML(pick.hero || "")}" /></td>
       ${["kills", "deaths", "assists"].map((stat) => `<td><input type="number" min="0" step="1" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} ${stat}" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="${stat}" value="${pick[stat]}" /></td>`).join("")}
@@ -1896,7 +2005,7 @@ function renderDraftSide(teamName, players, winner, side, blueSide) {
       .map((count) => `<b class="pick-multikill"><span>${count}K</span> ×${player.multiKills[count]}</b>`)
       .join("");
     return `<div class="draft-pick ${player.mvp ? "mvp-pick" : ""}">
-      <span class="pick-lane">${escapeHTML(player.lane.replace(" Lane", ""))}</span>
+      <span class="pick-lane">${renderLaneLabel(player.lane, true)}</span>
       <span class="pick-identity"><span class="pick-player">${escapeHTML(player.player)}${player.mvp ? '<b class="pick-tag mvp-flag">MVP</b>' : ""}${player.firstBlood ? '<b class="pick-tag first-blood">FIRST BLOOD</b>' : ""}</span><span class="pick-hero">${escapeHTML(player.hero)}</span></span>
       <span class="pick-kda"><b>${player.kills}</b><i>/</i><b>${player.deaths}</b><i>/</i><b>${player.assists}</b></span>
       <span class="pick-extra-stats"><span><b>KP</b> ${calculatePlayerKp(players, player)}%</span><span><b>GOLD</b> ${Number(player.gold || 0).toLocaleString("en-US")}</span><span><b>HERO DMG</b> ${Number(player.damage || 0).toLocaleString("en-US")}</span><span><b>TAKEN</b> ${Number(player.damageTaken || 0).toLocaleString("en-US")}</span></span>
@@ -2132,7 +2241,7 @@ document.querySelector("#entry-game-panel").addEventListener("input", (event) =>
       const team = selectedTeamNames()[side === "A" ? "teamA" : "teamB"];
       const typedName = input.value.trim();
       const rosterMember = getTeamRoster(document.querySelector("#entry-league").value, team)
-        .find((member) => member.role === pick.lane && member.name.toLowerCase() === typedName.toLowerCase());
+        .find((member) => canPlayLane(member, pick.lane) && member.name.toLowerCase() === typedName.toLowerCase());
       pick.player = input.value;
       pick.playerId = rosterMember?.id || "";
     } else {
@@ -2352,6 +2461,16 @@ document.querySelector("#match-form").addEventListener("submit", async (event) =
   if (previewMatch.games.some((game) => [...game.playersA, ...game.playersB].some((player) => !player.player.trim()))) {
     showToast("Enter all five player names for both teams before saving the result.");
     return;
+  }
+  for (const game of previewMatch.games) {
+    for (const side of ["A", "B"]) {
+      const players = game[`players${side}`].map((player) => player.player.trim().toLowerCase());
+      if (new Set(players).size !== players.length) {
+        const team = side === "A" ? previewMatch.teamA : previewMatch.teamB;
+        showToast(`${team} cannot use the same player in more than one role in Game ${game.gameNumber}.`);
+        return;
+      }
+    }
   }
   if (!previewMatch.games.length || previewMatch.scoreA === previewMatch.scoreB) {
     showToast("Choose game winners that produce a series winner.");

@@ -120,6 +120,18 @@ th:first-child, td:first-child { padding-left: 19px; }
 td { height: 57px; padding: 8px 14px; border-bottom: 1px solid #f0f2ee; color: #59645d; font-size: 9px; white-space: nowrap; }
 tbody tr:last-child td { border-bottom: 0; }
 .table-sub { display: block; margin-top: 4px; color: #929b94; font-size: 8px; }
+.lane-label { min-width: 0; display: inline-flex; align-items: center; gap: 5px; vertical-align: middle; white-space: nowrap; }
+.lane-icon { width: 18px; height: 14px; flex: 0 0 auto; background: var(--lane-icon-on-light) center / contain no-repeat; }
+.lane-icon-clash { --lane-icon-on-light: url("./assets/roles/clash-dark.png"); --lane-icon-on-dark: url("./assets/roles/clash-light.png"); }
+.lane-icon-jungle { --lane-icon-on-light: url("./assets/roles/jungle-dark.png"); --lane-icon-on-dark: url("./assets/roles/jungle-light.png"); }
+.lane-icon-mid { --lane-icon-on-light: url("./assets/roles/mid-dark.png"); --lane-icon-on-dark: url("./assets/roles/mid-light.png"); }
+.lane-icon-farm { --lane-icon-on-light: url("./assets/roles/farm-dark.png"); --lane-icon-on-dark: url("./assets/roles/farm-light.png"); }
+.lane-icon-roam { --lane-icon-on-light: url("./assets/roles/roam-dark.png"); --lane-icon-on-dark: url("./assets/roles/roam-light.png"); }
+.lane-label .lane-icon-fill { display: grid; place-items: center; color: #202622; background: none; }
+.lane-icon-fill::before { content: "✱"; font-size: 19px; font-weight: 900; line-height: 1; }
+body.dark-mode .lane-icon { background-image: var(--lane-icon-on-dark); }
+body.dark-mode .lane-label .lane-icon-fill { color: #f5f1e6; background-image: none; }
+.table-sub .lane-icon { width: 15px; height: 12px; }
 .table-footer { display: flex; align-items: center; justify-content: space-between; padding: 11px 19px; border-top: 1px solid #eff1ed; color: #8a948c; font-size: 9px; }
 .table-footer strong { color: #59645c; font-weight: 600; }
 .no-results { padding: 24px 19px; color: #89928b; text-align: center; font-size: 10px; }
@@ -325,6 +337,8 @@ h1 { font-size: 30px; }
 .draft-pick:last-child { border-bottom: 0; }
 .draft-pick.mvp-pick { background: linear-gradient(90deg, #f8f4e7, transparent 70%); }
 .pick-lane { grid-area: lane; align-self: start; padding-top: 3px; color: #78857c; font-size: 9px; font-weight: 800; }
+.pick-lane .lane-label { flex-direction: column; align-items: flex-start; gap: 2px; }
+.pick-lane .lane-icon { width: 22px; height: 17px; }
 .pick-identity { grid-area: identity; min-width: 0; display: grid; gap: 2px; }
 .pick-player { min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 5px; color: #344239; font-size: 12px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .pick-hero { overflow: hidden; color: #839087; font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -725,8 +739,14 @@ body.dark-mode .access-lock { color: var(--dark-accent-text); background: var(--
 .roster-player-list > div:last-child { border-bottom: 0; }
 .roster-player-list span { color: #7c8980; }
 .roster-player-list strong { color: #445148; }
-.roster-player-list .roster-role { min-width: 48px; }
-.roster-player-list .roster-role-sub { width: fit-content; min-width: 0; padding: 3px 6px; border: 1px solid #e2d7b4; border-radius: 4px; color: #8a6b18; background: #fbf6e7; font-size: 8px; font-weight: 900; letter-spacing: .08em; }
+.roster-player-list .roster-role { min-width: 84px; display: grid; gap: 4px; }
+.roster-role .lane-label { gap: 4px; }
+.roster-role .lane-icon { width: 20px; height: 16px; }
+.roster-secondary-role { display: flex; align-items: center; gap: 4px; font-size: 8px; font-weight: 700; }
+.roster-secondary-role > b { color: #9aa39d; font-size: 7px; letter-spacing: .06em; }
+.roster-secondary-role .lane-icon { width: 14px; height: 11px; }
+.roster-player-row > strong { flex: 1 1 100px; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.roster-player-list .roster-status-sub { width: fit-content; padding: 3px 6px; border: 1px solid #e2d7b4; border-radius: 4px; color: #8a6b18; background: #fbf6e7; font-size: 8px; font-weight: 900; letter-spacing: .08em; }
 .danger-button { padding: 5px 7px; border: 1px solid #efd6d4; border-radius: 5px; color: #a74d48; background: #fff8f7; font-size: 9px; font-weight: 800; cursor: pointer; white-space: nowrap; }
 .danger-button:disabled { border-color: #e8ebe8; color: #9aa39c; background: #f5f6f5; cursor: not-allowed; }
 .compare-controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 15px; padding: 16px; }
@@ -810,7 +830,8 @@ body.dark-mode .roster-team-card > header strong, body.dark-mode .roster-player-
 body.dark-mode .roster-team-card > header small, body.dark-mode .roster-player-list span { color: var(--dark-muted); }
 body.dark-mode .roster-player-list > div { border-color: var(--dark-border); }
 body.dark-mode .roster-route { color: var(--dark-accent-text); background: var(--dark-surface-active); }
-body.dark-mode .roster-player-list .roster-role-sub { border-color: #695c37; color: #ead58e; background: #3b3422; }
+body.dark-mode .roster-secondary-role > b { color: var(--dark-muted); }
+body.dark-mode .roster-player-list .roster-status-sub { border-color: #695c37; color: #ead58e; background: #3b3422; }
 body.dark-mode .team-monogram { color: var(--dark-accent-text); background: var(--dark-surface-active); }
 body.dark-mode .danger-button { border-color: #684542; color: #f0c4bf; background: #382624; }
 body.dark-mode .danger-button:disabled { border-color: #3b473e; color: #aab6ad; background: #252e28; }
@@ -915,6 +936,8 @@ body.dark-mode .entry-objective-team input { border-color: var(--dark-border-str
 .entry-stats-table th:last-child, .entry-stats-table td:last-child { border-right: 0; }
 .entry-stats-table thead th { position: sticky; top: 0; overflow: hidden; color: #748178; background: #f8faf7; font-size: 8px; font-weight: 900; text-overflow: ellipsis; }
 .entry-stats-table tbody th { color: #344239; text-align: left; }
+.entry-stats-table tbody th .lane-label { flex-direction: column; align-items: center; gap: 1px; }
+.entry-stats-table tbody th .lane-icon { width: 18px; height: 14px; }
 .entry-stats-table td { padding: 0; }
 .entry-stats-table .entry-kp-cell { padding: 5px 3px; background: #f8faf7; font-weight: 800; }
 .entry-stats-table input:not([type="checkbox"]):not([type="radio"]), .entry-stats-table select { width: 100%; min-width: 0; height: 31px; padding: 0 3px; border: 0; border-radius: 0; color: #35443a; background: #fff; font-size: 9px; text-align: center; }
