@@ -51,24 +51,18 @@ export interface Match {
   winner?: string;
   scheduledAt?: string;
   liveLink?: string;
-  patch?: string;
   isFinished?: boolean;
   games: Game[];
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface RosterPlayer {
   id?: string;
   name: string;
   position: LanePosition | StaffRole | "Substitute";
-  secondaryPosition?: LanePosition;
   team: string;
   league: string;
   previousNames?: string[];
   realName?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface ScheduleEntry {
@@ -81,7 +75,6 @@ export interface ScheduleEntry {
   scheduledAt: string;
   liveLink?: string;
   isFinished?: boolean;
-  createdAt?: string;
 }
 
 export interface LeaguePreset {

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f6f2" />
+    <title>HOK Database · Level Up Indonesia</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section class="access-gate" id="access-gate">
+      <header class="access-header">
+        <div class="levelup-logo" role="img" aria-label="Level Up Indonesia"></div>
+        <button class="icon-button" id="gate-theme-button" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
+      </header>
+      <main class="access-panel">
+        <span class="access-lock" aria-hidden="true">⌑</span>
+        <p class="eyebrow">PRIVATE MATCH CENTER</p>
+        <h1>Welcome back</h1>
+        <p>Enter the viewer password to view match results, drafts, and team stats.</p>
+        <form id="access-form">
+          <label for="access-password">Viewer password</label>
+          <input id="access-password" type="password" autocomplete="current-password" required />
+          <p class="access-error" id="access-error" role="alert" hidden>Incorrect password. Try again.</p>
+          <button type="submit" class="button button-primary">Continue <span>→</span></button>
+        </form>
+      </main>
+      <footer>© 2026 Level Up Indonesia</footer>
+    </section>
+
+    <div class="app-shell" id="app-shell" hidden>
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="HOK Database home">
+          <span class="brand-mark">H</span>
+          <span class="brand-copy">
+            <strong>HOK DATABASE</strong>
+            <small>LEVEL UP INDONESIA</small>
+          </span>
+        </a>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-page="matches" aria-current="page">Matches</button>
+          <button class="nav-item" data-page="tournaments" hidden>Tournaments</button>
+          <button class="nav-item" data-page="standings">Standings</button>
+          <button class="nav-item" data-page="players">Player stats</button>
+          <button class="nav-item" data-page="roster">Roster</button>
+          <button class="nav-item" data-page="compare">Head to head</button>
+          <button class="nav-item" data-page="awards">Achievements</button>
+        </nav>
+        <div class="topbar-actions">
+          <button class="icon-button" id="theme-button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
+          <button class="sign-out-button" id="admin-toggle-button" type="button" hidden>Admin</button>
+          <button class="sign-out-button" id="sign-out-button" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <main class="main-area">
+        <div class="page-content" id="page-content">
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">CURRENT SEASON · INDONESIA</p>
+              <h1>Matches</h1>
+            </div>
+            <div class="heading-actions">
+              <label class="select-wrap">
+                <span class="sr-only">Select league</span>
+                <select id="league-select" aria-label="Select league">
+                  <option value="All leagues" selected>All leagues</option>
+                </select>
+                <span class="select-chevron">⌄</span>
+              </label>
+              <button class="button button-primary" id="add-match-button" hidden><span class="button-plus">＋</span> Add match</button>
+            </div>
+          </section>
+
+          <section class="stat-grid" aria-label="Season overview">
+            <article class="stat-card">
+              <div class="stat-icon mint">▤</div>
+              <div class="stat-meta"><span>Total matches</span><strong data-stat="total-matches">0</strong><small>Completed and upcoming</small></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon amber">◷</div>
+              <div class="stat-meta"><span>This week</span><strong data-stat="weekly-schedules">0</strong><small>Upcoming matches</small></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon lilac">♙</div>
+              <div class="stat-meta"><span>Teams competing</span><strong data-stat="teams">0</strong><small data-stat="leagues">0 leagues selected</small></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon blue">◉</div>
+              <div class="stat-meta"><span>Results recorded</span><strong data-stat="recorded">0</strong><small><b data-stat="remaining">0</b> upcoming</small></div>
+            </article>
+          </section>
+
+          <section class="next-match-card" id="next-match-card" hidden>
+            <div class="next-match-main">
+              <div class="next-match-heading"><span>UPCOMING FIXTURE</span><span class="match-format"></span></div>
+              <div class="versus-row">
+                <div class="team-block"><span class="team-copy"><strong></strong></span></div>
+                <span class="versus">VS</span>
+                <div class="team-block team-block-right"><span class="team-copy"><strong></strong></span></div>
+              </div>
+              <div class="match-details"><button type="button" class="text-button" id="next-match-detail">View match details <span>→</span></button></div>
+            </div>
+          </section>
+
+          <section class="content-card schedule-section" id="schedule-section">
+            <div class="section-heading">
+              <div><h2>Upcoming matches</h2><p>Scheduled fixtures for the selected league.</p></div>
+            </div>
+            <div class="schedule-list" id="schedule-list"></div>
+          </section>
+
+          <section class="content-card results-section">
+            <div class="section-heading results-heading">
+              <div><h2>Match results</h2><p>Completed matches in the selected league.</p></div>
+              <div class="table-actions">
+                <label class="search-box"><span>⌕</span><input id="match-search" type="search" placeholder="Search teams..." aria-label="Search teams" /></label>
+                <label class="filter-select"><select id="result-filter" aria-label="Filter results"><option value="All leagues">All leagues</option></select><span>⌄</span></label>
+              </div>
+            </div>
+            <div class="schedule-list results-list" id="results-body"></div>
+            <div class="no-results" id="no-results" hidden>No matches found.</div>
+            <div class="table-footer"><span><strong id="result-count">0 matches</strong></span></div>
+          </section>
+
+          <footer class="page-footer"><span>© 2026 Level Up Indonesia</span></footer>
+        </div>
+      </main>
+    </div>
+    <div class="modal-backdrop" id="match-modal" hidden>
+      <section class="modal entry-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-heading"><div><p class="eyebrow">MATCH ENTRY</p><h2 id="modal-title">Add a match</h2></div><button type="button" class="icon-button close-modal" aria-label="Close">×</button></div>
+        <form id="match-form">
+          <div>
+            <div class="entry-form-section-heading"><strong>MATCH INFORMATION</strong><span>Teams, schedule, format, and stream.</span></div>
+            <label class="field-label">Tournament<select id="entry-league" required><option value="">Select a tournament</option></select></label>
+            <div class="field-row"><label class="field-label">Team A<select id="entry-team-a" required><option value="">Select a team</option></select></label><label class="field-label">Team B<select id="entry-team-b" required><option value="">Select a team</option></select></label></div>
+            <div class="field-row"><label class="field-label">Phase<select id="entry-phase"><option>Group Stage</option><option>Playoffs</option></select></label><label class="field-label">Stage<select id="entry-stage"></select><input id="entry-custom-stage" type="text" maxlength="80" placeholder="Enter custom stage" hidden /></label></div>
+            <label class="field-label">Match format<select id="entry-format"><option>BO1</option><option>BO3</option><option selected>BO5</option><option>BO7</option></select></label>
+            <div class="field-row"><label class="field-label">Date<input id="entry-date" type="date" required /></label><label class="field-label">Start time (GMT+7)<input id="entry-time" type="time" required /></label></div>
+            <label class="field-label">Live stream URL<input id="entry-stream" type="url" placeholder="https://youtube.com/..." /></label>
+            <div class="modal-actions entry-info-actions"><button type="button" class="button button-secondary close-modal">Cancel</button><button type="button" class="button button-secondary save-schedule-button">Save schedule</button><button type="button" class="button button-primary" id="continue-to-entry">Enter results <span>→</span></button></div>
+          </div>
+          <div id="entry-step-two" hidden>
+            <div class="entry-results-heading"><strong>RESULTS &amp; DRAFT</strong><span>Series score and game-by-game data.</span></div>
+            <div class="entry-score-card">
+              <span class="entry-section-kicker">SERIES RESULT</span>
+              <div class="entry-series-score">
+                <label><span id="entry-score-label-a">Team A</span><input id="entry-score-a" type="number" min="0" max="4" value="0" aria-label="Team A series score" readonly /></label>
+                <b>:</b>
+                <label><span id="entry-score-label-b">Team B</span><input id="entry-score-b" type="number" min="0" max="4" value="0" aria-label="Team B series score" readonly /></label>
+              </div>
+              <strong class="entry-winner" id="entry-series-winner"></strong>
+            </div>
+            <div class="entry-game-tabs" id="entry-game-tabs" role="tablist" aria-label="Games in this series"></div>
+            <section class="entry-game-panel" id="entry-game-panel" aria-live="polite"></section>
+            <div class="modal-actions"><button type="button" class="button button-secondary close-modal">Cancel</button><button type="button" class="button button-secondary save-schedule-button">Save schedule</button><button type="submit" class="button button-primary" id="save-match-button">Save completed match <span>→</span></button></div>
+          </div>
+        </form>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="admin-access-modal" hidden>
+      <section class="modal admin-access-modal" role="dialog" aria-modal="true" aria-labelledby="admin-access-title">
+        <div class="modal-heading"><div><p class="eyebrow">ADMIN ACCESS</p><h2 id="admin-access-title">Unlock match input</h2></div><button type="button" class="icon-button close-admin-modal" aria-label="Close admin access">×</button></div>
+        <p class="admin-access-copy">Viewer access is read-only. Enter the separate admin password to add match results and drafts.</p>
+        <form id="admin-access-form">
+          <label class="field-label">Admin password<input id="admin-password" type="password" autocomplete="current-password" required /></label>
+          <p class="access-error" id="admin-access-error" role="alert" hidden>Incorrect admin password. Try again.</p>
+          <div class="modal-actions"><button type="button" class="button button-secondary close-admin-modal">Cancel</button><button type="submit" class="button button-primary">Unlock input</button></div>
+        </form>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="detail-modal" hidden>
+      <section class="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+        <div class="modal-heading">
+          <div><p class="eyebrow">MATCH BREAKDOWN</p><h2 id="detail-title"></h2></div>
+          <button type="button" class="icon-button close-detail" aria-label="Close details">×</button>
+        </div>
+        <div id="detail-content"></div>
+        <div class="modal-actions"><button type="button" class="button button-secondary close-detail">Close details</button></div>
+      </section>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

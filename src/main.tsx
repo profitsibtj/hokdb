@@ -1,12 +1,30 @@
-import redesignDocument from "../redesign-preview/index.html?raw";
-import "../redesign-preview/styles.css";
+import uiDocument from "./ui/index.html?raw";
+import "./ui/styles.css";
 import { accessApi, restoreAccessSession, signInWithPassword, signOut } from "./accessClient";
 import { clientDb } from "./dataClient";
-import { gmt7ToIso, isoToGmt7Parts } from "./utils";
 import type { Game, GameObjectives, LeaguePreset, Match, MatchFormat, RosterPlayer, ScheduleEntry } from "./types";
 
+const gmt7OffsetMs = 7 * 60 * 60 * 1000;
+
+function gmt7ToIso(dateValue: string, timeValue: string): string {
+  if (!dateValue || !timeValue) return "";
+  const date = new Date(`${dateValue}T${timeValue}:00+07:00`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function isoToGmt7Parts(iso: string): { date: string; time: string } | null {
+  if (!iso) return null;
+  const utcMs = new Date(iso).getTime();
+  if (Number.isNaN(utcMs)) return null;
+  const shifted = new Date(utcMs + gmt7OffsetMs);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return {
+    date: `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`,
+    time: `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`,
+  };
+}
+
 type PreviewPlayer = {
-  playerId: string;
   player: string;
   lane: string;
   hero: string;
@@ -152,7 +170,7 @@ function toMatch(match: PreviewMatch): Match {
   };
 }
 
-function toSchedule(match: PreviewMatch, finished: boolean): ScheduleEntry {
+function toSchedule(match: PreviewMatch): ScheduleEntry {
   return {
     league: match.league,
     matchCode: match.stage || `${match.teamA} vs ${match.teamB}`,
@@ -161,7 +179,7 @@ function toSchedule(match: PreviewMatch, finished: boolean): ScheduleEntry {
     format: formatMap[match.format] || "Bo1",
     scheduledAt: gmt7ToIso(match.dateISO, match.time || "00:00"),
     liveLink: match.streamUrl,
-    isFinished: finished,
+    isFinished: match.finished,
   };
 }
 
@@ -185,7 +203,7 @@ async function saveSchedule(match: PreviewMatch, scheduleId?: string): Promise<v
       && isoToGmt7Parts(entry.scheduledAt)?.date === matchDate;
   });
   const entry = {
-    ...toSchedule(match, match.finished),
+    ...toSchedule(match),
     ...(scheduleId ? { id: scheduleId } : existing?.id ? { id: existing.id } : {}),
   };
   if (entry.id) await clientDb.updateSchedule(entry.id, entry);
@@ -235,6 +253,28 @@ const productionAdapter = {
       });
     await saveSchedule(previewMatch, oldSchedule?.id);
   },
+  deleteMatch: async (id: string) => {
+    if (id.startsWith("db-schedule-")) {
+      await clientDb.deleteSchedule(id.slice("db-schedule-".length));
+      return;
+    }
+    if (!id.startsWith("db-match-")) throw new Error("Unsupported match ID.");
+    const matchId = id.slice("db-match-".length);
+    const matches = await clientDb.getMatches();
+    const match = matches.find((entry) => entry.id === matchId);
+    if (!match) throw new Error("The match no longer exists in Supabase.");
+    const schedules = await clientDb.getSchedules();
+    const linkedSchedule = schedules.find((schedule) => {
+      const sameTeams = (schedule.teamA === match.teamA && schedule.teamB === match.teamB)
+        || (schedule.teamA === match.teamB && schedule.teamB === match.teamA);
+      return schedule.league === match.league
+        && sameTeams
+        && schedule.matchCode === match.stage
+        && isoToGmt7Parts(schedule.scheduledAt)?.date === isoToGmt7Parts(match.scheduledAt || "")?.date;
+    });
+    await clientDb.deleteMatch(matchId);
+    if (linkedSchedule?.id) await clientDb.deleteSchedule(linkedSchedule.id);
+  },
   saveRoster: async (player: { id?: string; name: string; identity: string; role: string; tournament: string; team: string }) => {
     if (!isRosterPosition(player.role)) throw new Error(`Unsupported roster role: ${player.role}`);
     const record: RosterPlayer = {
@@ -271,7 +311,6 @@ const productionAdapter = {
       if (match.league !== tournament || (match.teamA !== oldName && match.teamB !== oldName)) continue;
       if (match.teamA === oldName) match.teamA = newName;
       if (match.teamB === oldName) match.teamB = newName;
-      if (match.winner === oldName) match.winner = newName;
       if (match.id) await clientDb.updateMatch(match.id, match);
     }
 
@@ -286,14 +325,14 @@ const productionAdapter = {
   saveTournaments: async (tournaments: TournamentData[]) => clientDb.saveLeaguePresets(tournaments),
 };
 
-async function startRedesign() {
-  const parsed = new DOMParser().parseFromString(redesignDocument, "text/html");
+async function startApp() {
+  const parsed = new DOMParser().parseFromString(uiDocument, "text/html");
   parsed.querySelector('link[href="./styles.css"]')?.remove();
   parsed.querySelectorAll("script").forEach((script) => script.remove());
   document.body.replaceWith(parsed.body.cloneNode(true));
 
-  const { configureProduction } = await import("../redesign-preview/app.js");
+  const { configureProduction } = await import("./ui/app.js");
   configureProduction(productionAdapter);
 }
 
-void startRedesign();
+void startApp();

@@ -1,21 +1,20 @@
 # HOK Database
 
-The GitHub Pages app is a static site backed by Supabase Postgres and a password-protected Edge Function.
+HOK Database is a static GitHub Pages application. Contains match breakdowns, standings, player statistics, tournament rosters, head-to-head records, and achievements data.
 
-## Local development
+### Change the dark-mode color
 
-1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-2. Run `npm install`.
-3. Run `npm run dev` and open the local URL printed by Vite.
+Open `src/ui/styles.css`, find `--dark-accent` inside the `body.dark-mode` block, and replace its hex value. The rest of the dark palette is generated automatically from this one color.
 
-## Build and preview
+```css
+--dark-accent: #2f9e63; /* green */
+--dark-accent: #d14b4b; /* red */
+--dark-accent: #4f7ee8; /* blue */
+--dark-accent: #9b62d6; /* purple */
+```
 
-- `npm run lint` checks TypeScript.
-- `npm run build:pages` builds the static site into `dist/`.
-- `npm run preview` serves the production build locally.
-
-See [redesign-preview/README.md](./redesign-preview/README.md) for Edge Function deployment, viewer/admin password setup, and publishing steps.
+Keep only one active `--dark-accent` declaration, save the file, and refresh the website. This changes dark mode only; the light theme is unaffected.
 
 ## Copyright
 
-All data provided by Level Up Indonesia.
+All data is provided by Level Up Indonesia.

@@ -159,8 +159,9 @@ async function handleAction(action: string, body: Record<string, unknown>, role:
     return data.id;
   }
 
-  if (action === "delete_roster") {
-    const { error } = await database.from("roster").delete().eq("id", requireIntegerId(body.id));
+  if (action === "delete_match" || action === "delete_schedule" || action === "delete_roster") {
+    const table = action === "delete_match" ? "matches" : action === "delete_schedule" ? "schedules" : "roster";
+    const { error } = await database.from(table).delete().eq("id", requireIntegerId(body.id));
     if (error) throw error;
     return null;
   }

@@ -17,176 +17,45 @@ const detailModal = document.querySelector("#detail-modal");
 const appShell = document.querySelector("#app-shell");
 const accessGate = document.querySelector("#access-gate");
 const toast = document.querySelector("#toast");
-const databaseModal = document.querySelector("#database-modal");
-const databaseConnectionError = document.querySelector("#database-connect-error");
-let previewViewerPassword = "viewer-preview";
-let previewAdminPassword = "admin-preview";
-const databaseSessionKey = "hokdb_redesign_supabase_session_v2";
 let productionDatabaseAdapter = null;
-let productionMode = false;
 let toastTimeout;
-let hasAdminAccess = false;
+let realtimeRefreshTimer;
+let refreshInProgress = false;
 let editingMatchId = "";
 let currentDetailMatchId = "";
 const collapsedGames = new Set();
 let currentEntryGame = 1;
 let entryGameDrafts = [];
 let pendingAdminAction = null;
-let leagueTeams = {
-  "Honor of Kings Indonesia League": ["Alter Ego", "Bigetron Esports", "EVOS", "ONIC Esports", "RRQ"],
-  "Honor of Kings Invitational": ["Bigetron Esports", "EVOS", "RRQ", "Team RRQ"],
-};
-let tournamentSettings = {
-  "Honor of Kings Indonesia League": {
-    globalBanPick: false,
-    playoffsEnabled: true,
-    bracketFormat: "double-elimination",
-    playInEnabled: false,
-    participants: [
-      { team: "Alter Ego", abbreviation: "AE", route: "Invited" },
-      { team: "Bigetron Esports", abbreviation: "BTR", route: "Invited" },
-      { team: "EVOS", abbreviation: "EVOS", route: "Closed Qualifier" },
-      { team: "ONIC Esports", abbreviation: "ONIC", route: "Open Qualifier" },
-      { team: "RRQ", abbreviation: "RRQ", route: "Invited" },
-    ],
-  },
-  "Honor of Kings Invitational": {
-    globalBanPick: true,
-    playoffsEnabled: true,
-    bracketFormat: "double-elimination",
-    playInEnabled: false,
-    participants: [
-      { team: "Bigetron Esports", abbreviation: "BTR", route: "Invited" },
-      { team: "EVOS", abbreviation: "EVOS", route: "Wildcard" },
-      { team: "RRQ", abbreviation: "RRQ", route: "Invited" },
-      { team: "Team RRQ", abbreviation: "TR", route: "Open Qualifier" },
-    ],
-  },
-};
+let leagueTeams = {};
+let tournamentSettings = {};
 const teamRosters = new Map();
-let sampleTournamentNames = new Set(["Honor of Kings Indonesia League", "Honor of Kings Invitational"]);
 const qualificationRoutes = ["Open Qualifier", "Invited", "Wildcard", "Closed Qualifier", "Group Stage"];
 
 const lanes = ["Clash Lane", "Jungle", "Mid Lane", "Farm Lane", "Roam"];
-const playerNames = {
-  "Alter Ego": ["Pai", "Nino", "YukTzy", "Celiboy", "Rasy"],
-  RRQ: ["Rinz", "Xyve", "Idok", "Sionz", "Vyn"],
-  "ONIC Esports": ["Kairi", "CW", "Sanz", "Butsss", " Kiboy"],
-  EVOS: ["Tazz", "DreamS", "Cr1te", "Branz", "Dream"],
-  "Bigetron Esports": ["Super Kenn", "Kyy", "Moreno", "Vaanstrong", "Falah"],
-  "Team RRQ": ["Rinz", "Xyve", "Idok", "Sionz", "Vyn"],
-};
-const heroDrafts = [
-  [["Dharma", "Lam", "Lady Zhen", "Marco Polo", "Zhang Fei"], ["Biron", "Augran", "Mai Shiranui", "Loong", "Da Qiao"]],
-  [["Dolia", "Jing", "Angela", "Hou Yi", "Kui"], ["Sun Ce", "Pei", "Gan & Mo", "Consort Yu", "Guiguzi"]],
-  [["Allain", "Musashi", "Shangguan", "Luban No. 7", "Donghuang"], ["Charlotte", "Lam", "Daji", "Arli", "Liu Shan"]],
-  [["Mayene", "Nakoruru", "Shangguan", "Garo", "Dyadia"], ["Biron", "Augran", "Lady Zhen", "Loong", "Zhang Fei"]],
-  [["Li Xin", "Jing", "Angela", "Marco Polo", "Dolia"], ["Dharma", "Pei", "Mai Shiranui", "Arli", "Kui"]],
-];
 const heroOptions = [...new Set([
-  ...heroDrafts.flat(2),
+  "Allain", "Angela", "Arli", "Augran", "Biron", "Charlotte", "Consort Yu", "Da Qiao",
+  "Daji", "Dharma", "Dolia", "Dyadia", "Gan & Mo", "Garo", "Guiguzi", "Hou Yi", "Jing",
+  "Kui", "Lady Zhen", "Li Xin", "Liu Shan", "Loong", "Luban No. 7", "Mai Shiranui",
+  "Marco Polo", "Mayene", "Musashi", "Nakoruru", "Pei", "Shangguan", "Sun Ce", "Zhang Fei",
   "Arthur", "Bian Que", "Cai Wenji", "Diao Chan", "Erin", "Gongsun Li", "Han Xin",
   "Li Bai", "Lu Bu", "Luna", "Mulan", "Mozi", "Nezha", "Sun Bin", "Wukong",
   "Xiang Yu", "Ying", "Yuhuan", "Zhuang Zhou", "Zilong", "Dun", "Huang Zhong",
   "Liu Bang", "Zhou Yu", "Dian Wei", "Xiahou Dun", "Lady Sun", "Ming", "Sima Yi",
   "Zhang Liang", "Zhang Fei", "Donghuang", "Yaria", "Lam", "Dolia", "Augran",
 ])].sort();
-const statLinesA = [[3, 1, 7, 11200, 18500, 12100], [7, 2, 9, 14300, 25800, 9700], [5, 2, 8, 13100, 22800, 10500], [4, 1, 10, 12400, 17600, 16200], [1, 3, 13, 9300, 9800, 20400]];
-const statLinesB = [[2, 3, 4, 10500, 14200, 15800], [4, 4, 5, 11900, 19300, 13800], [3, 3, 5, 11700, 20100, 11900], [4, 4, 3, 12600, 21100, 11700], [1, 6, 8, 9000, 8800, 23800]];
-
-function createPlayers(tournament, team, heroes, gameNumber, side, isWinner) {
-  const statLines = side === "A" ? statLinesA : statLinesB;
-  return lanes.map((lane, index) => {
-    const [baseKills, deaths, assists, gold, damage, damageTaken] = statLines[index];
-    const offset = gameNumber - 1;
-    const rosterMember = getTeamRoster(tournament, team).find((player) => player.role === lane)
-      || getTeamRoster(tournament, team)[index]
-      || { id: `${rosterKey(tournament, team)}|${index}`, name: playerNames[team]?.[index]?.trim() || `${team} Player ${index + 1}` };
-    return {
-      playerId: rosterMember.id,
-      lane,
-      player: rosterMember.name,
-      hero: heroes[index],
-      kills: Math.max(0, baseKills + (offset % 2)),
-      deaths: Math.max(0, deaths + ((offset + index) % 2)),
-      assists: assists + (offset % 3),
-      gold: gold + offset * 230,
-      damage: damage + offset * 740,
-      damageTaken: damageTaken + offset * 380,
-      multiKills: { 1: index === 1 ? 1 : 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-      firstBlood: gameNumber === 1 && side === "A" && index === 1,
-      mvp: isWinner && index === (side === "A" ? (gameNumber - 1) % 5 : (gameNumber + 1) % 5),
-    };
-  });
-}
 
 function calculatePlayerKp(players, player) {
   const teamKills = players.reduce((total, entry) => total + (Number(entry.kills) || 0), 0);
   return teamKills ? Math.round(((Number(player.kills) + Number(player.assists)) / teamKills) * 100) : 0;
 }
 
-function createGame(tournament, teamA, teamB, gameNumber, winner, picks) {
-  const [heroesA, heroesB] = picks;
-  const winnerIsA = winner === teamA;
-  const objectivesA = { Tyrant: winnerIsA ? 2 : 1, "Shadow Tyrant": winnerIsA ? 1 : 0, Overlord: winnerIsA ? 1 : 0, Towers: winnerIsA ? 7 : 4 };
-  const objectivesB = { Tyrant: winnerIsA ? 1 : 2, "Shadow Tyrant": winnerIsA ? 0 : 1, Overlord: winnerIsA ? 0 : 1, Towers: winnerIsA ? 4 : 7 };
-  return {
-    gameNumber,
-    winner,
-    scoreA: winnerIsA ? 1 : 0,
-    scoreB: winnerIsA ? 0 : 1,
-    duration: ["18:42", "21:16", "16:53", "23:08", "19:37"][(gameNumber - 1) % 5],
-    blueSide: gameNumber % 2 === 1 ? "A" : "B",
-    bansA: ["Augran", "Loong", "Yaria", "Lam"],
-    bansB: ["Dolia", "Jing", "Lady Zhen", "Marco Polo"],
-    objectivesA,
-    objectivesB,
-    playersA: createPlayers(tournament, teamA, heroesA, gameNumber, "A", winnerIsA),
-    playersB: createPlayers(tournament, teamB, heroesB, gameNumber, "B", !winnerIsA),
-  };
-}
-
-function createSeries(tournament, teamA, teamB, winners) {
-  return winners.map((winner, index) => createGame(tournament, teamA, teamB, index + 1, winner, heroDrafts[index]));
-}
-
-let matchDetails = {
-  "ae-rrq": {
-    league: "Honor of Kings Indonesia League", teamA: "Alter Ego", teamB: "RRQ", scoreA: 3, scoreB: 1, format: "BO5",
-    stage: "Upper Bracket", date: "Oct 25, 2026", dateISO: "2026-10-25", entryTime: "19:30", time: "7:30 PM", finished: true,
-    phase: "Playoffs", tournamentId: "Honor of Kings Indonesia League", streamUrl: "",
-    games: createSeries("Honor of Kings Indonesia League", "Alter Ego", "RRQ", ["Alter Ego", "RRQ", "Alter Ego", "Alter Ego"]),
-  },
-  "onic-evos": {
-    league: "Honor of Kings Indonesia League", teamA: "ONIC Esports", teamB: "EVOS", scoreA: 2, scoreB: 3, format: "BO5",
-    stage: "Lower Bracket", date: "Oct 24, 2026", dateISO: "2026-10-24", entryTime: "16:00", time: "4:00 PM", finished: true,
-    phase: "Playoffs", tournamentId: "Honor of Kings Indonesia League", streamUrl: "",
-    games: createSeries("Honor of Kings Indonesia League", "ONIC Esports", "EVOS", ["ONIC Esports", "EVOS", "ONIC Esports", "EVOS", "EVOS"]),
-  },
-  "btr-rrq": {
-    league: "Honor of Kings Invitational", teamA: "Bigetron Esports", teamB: "RRQ", scoreA: 3, scoreB: 2, format: "BO5",
-    stage: "Quarterfinal", date: "Oct 23, 2026", dateISO: "2026-10-23", entryTime: "20:00", time: "8:00 PM", finished: true,
-    phase: "Playoffs", tournamentId: "Honor of Kings Invitational", streamUrl: "",
-    games: createSeries("Honor of Kings Invitational", "Bigetron Esports", "RRQ", ["Bigetron Esports", "RRQ", "RRQ", "Bigetron Esports", "Bigetron Esports"]),
-  },
-  "ae-btr": {
-    league: "Honor of Kings Indonesia League", teamA: "Alter Ego", teamB: "Bigetron Esports", format: "BO5", stage: "Grand Final",
-    date: "Oct 31, 2026", dateISO: "2026-10-31", entryTime: "19:00", time: "7:00 PM", phase: "Playoffs", finished: false,
-  },
-  "rrq-onic": {
-    league: "Honor of Kings Indonesia League", teamA: "RRQ", teamB: "ONIC Esports", format: "BO3", stage: "Lower Bracket",
-    date: "Nov 1, 2026", dateISO: "2026-11-01", entryTime: "16:00", time: "4:00 PM", phase: "Playoffs", finished: false,
-  },
-  "evos-rrq": {
-    league: "Honor of Kings Invitational", teamA: "EVOS", teamB: "Team RRQ", format: "BO3", stage: "Upper Bracket",
-    date: "Nov 2, 2026", dateISO: "2026-11-02", entryTime: "19:00", time: "7:00 PM", phase: "Group Stage", finished: false,
-  },
-};
-
-let leagueOptions = Object.keys(leagueTeams);
-let liveDataMode = false;
+let matchDetails = {};
+let leagueOptions = [];
 let activePage = "matches";
 let standingsStage = "group";
+let playerStatsSort = { key: "kda", direction: "desc" };
+const playerStatsFilters = {};
 const themeStorageKey = "hokdb_color_theme";
 
 function rosterKey(tournament, team) {
@@ -195,14 +64,7 @@ function rosterKey(tournament, team) {
 
 function getTeamRoster(tournament, team) {
   const key = rosterKey(tournament, team);
-  if (!teamRosters.has(key)) {
-    const players = sampleTournamentNames.has(tournament) ? (playerNames[team] || []) : [];
-    teamRosters.set(key, players.map((name, index) => ({
-      id: `${key}|${index}|${name}`,
-      name: name.trim(),
-      role: lanes[index] || "Substitute",
-    })));
-  }
+  if (!teamRosters.has(key)) teamRosters.set(key, []);
   return teamRosters.get(key);
 }
 
@@ -211,11 +73,11 @@ function formatDatabaseDate(value, includeTime = false) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const dateText = new Intl.DateTimeFormat("en-US", {
-    month: "short", day: "numeric", year: "numeric"
+    month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Jakarta"
   }).format(date);
   if (!includeTime) return dateText;
   return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric", minute: "2-digit", timeZoneName: "short"
+    hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone: "Asia/Jakarta"
   }).format(date);
 }
 
@@ -251,7 +113,7 @@ function getMatchLocalDateParts(match) {
   const instant = getMatchInstant(match);
   if (!instant) return null;
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-    year: "numeric", month: "2-digit", day: "2-digit"
+    year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Jakarta"
   }).formatToParts(instant).map(({ type, value }) => [type, value]));
   return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
 }
@@ -398,28 +260,6 @@ function getMatchIdentity(match) {
   return `${match.league.trim().toLowerCase()}|${teams.join("|")}|${match.dateISO}`;
 }
 
-async function fetchDatabaseTable(projectUrl, anonKey, accessToken, table) {
-  const rows = [];
-  const pageSize = 1000;
-  for (let offset = 0; ; offset += pageSize) {
-    const response = await fetch(`${projectUrl}/rest/v1/${table}?select=*`, {
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${accessToken}`,
-        Range: `${offset}-${offset + pageSize - 1}`,
-      },
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(`${table}: ${body.message || body.error || `HTTP ${response.status}`}`);
-    }
-    const page = await response.json();
-    if (!Array.isArray(page)) throw new Error(`${table}: unexpected response from Supabase.`);
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
-  }
-}
-
 function applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows }) {
   const nextRosters = new Map();
   rosterRows.forEach((row) => {
@@ -432,7 +272,6 @@ function applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows
       name: row.name || "Unknown player",
       role: row.position || "Substitute",
       identity: row.real_name || "",
-      secondaryRole: row.secondary_position || "",
     });
     nextRosters.set(key, members);
   });
@@ -495,37 +334,62 @@ function applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows
   return { matches: nextMatches, rosters: nextRosters, settings: nextSettings };
 }
 
-async function loadDatabaseSnapshot(projectUrl, anonKey, accessToken) {
-  const [matchRows, scheduleRows, rosterRows, tournamentRows] = await Promise.all([
-    fetchDatabaseTable(projectUrl, anonKey, accessToken, "matches"),
-    fetchDatabaseTable(projectUrl, anonKey, accessToken, "schedules"),
-    fetchDatabaseTable(projectUrl, anonKey, accessToken, "roster"),
-    fetchDatabaseTable(projectUrl, anonKey, accessToken, "tournaments"),
-  ]);
-  return applyDatabaseRows({ matchRows, scheduleRows, rosterRows, tournamentRows });
+async function refreshProductionData() {
+  if (!productionDatabaseAdapter || refreshInProgress) return;
+  refreshInProgress = true;
+  const selectedLeague = activePage === "matches"
+    ? document.querySelector("#league-select")?.value
+    : document.querySelector("[data-module-league]")?.value;
+  try {
+    const rows = await productionDatabaseAdapter.load();
+    const snapshot = applyDatabaseRows(rows);
+    matchDetails = snapshot.matches;
+    teamRosters.clear();
+    snapshot.rosters.forEach((members, key) => teamRosters.set(key, members));
+    tournamentSettings = snapshot.settings;
+    leagueTeams = Object.fromEntries(Object.entries(snapshot.settings).map(([league, config]) => [
+      league, config.participants.map((participant) => participant.team)
+    ]));
+    leagueOptions = Object.keys(tournamentSettings);
+    updateAdminControls();
+    setPage(activePage);
+    if (selectedLeague && activePage === "matches") {
+      const selector = document.querySelector("#league-select");
+      if ([...selector.options].some((option) => option.value === selectedLeague)) {
+        selector.value = selectedLeague;
+        updateLeagueView();
+      }
+    } else if (selectedLeague && activePage !== "tournaments" && leagueOptions.includes(selectedLeague)) {
+      renderModulePage(activePage, selectedLeague);
+    }
+  } finally {
+    refreshInProgress = false;
+  }
 }
 
-async function refreshProductionData() {
-  if (!productionDatabaseAdapter) return;
-  const rows = await productionDatabaseAdapter.load();
-  const snapshot = applyDatabaseRows(rows);
-  matchDetails = snapshot.matches;
-  teamRosters.clear();
-  snapshot.rosters.forEach((members, key) => teamRosters.set(key, members));
-  tournamentSettings = snapshot.settings;
-  leagueTeams = Object.fromEntries(Object.entries(snapshot.settings).map(([league, config]) => [
-    league, config.participants.map((participant) => participant.team)
-  ]));
-  sampleTournamentNames = new Set();
-  leagueOptions = Object.keys(tournamentSettings);
-  liveDataMode = true;
-  hasAdminAccess = !!productionDatabaseAdapter.canWrite;
-  updateAdminControls();
-  setPage(activePage);
+function canRefreshRealtimeData() {
+  return productionDatabaseAdapter
+    && !appShell.hidden
+    && document.visibilityState === "visible"
+    && modal.hidden
+    && adminAccessModal.hidden
+    && detailModal.hidden;
+}
+
+function startRealtimeRefresh() {
+  clearInterval(realtimeRefreshTimer);
+  realtimeRefreshTimer = setInterval(() => {
+    if (canRefreshRealtimeData()) refreshProductionData().catch(() => {});
+  }, 15000);
+}
+
+function stopRealtimeRefresh() {
+  clearInterval(realtimeRefreshTimer);
+  realtimeRefreshTimer = undefined;
 }
 
 function updateAdminControls() {
-  const canEdit = productionMode ? !!productionDatabaseAdapter?.canWrite : hasAdminAccess;
+  const canEdit = !!productionDatabaseAdapter?.canWrite;
   const tournamentTab = document.querySelector('.nav-item[data-page="tournaments"]');
   if (tournamentTab) tournamentTab.hidden = !canEdit;
   const addMatchButton = document.querySelector("#add-match-button");
@@ -541,16 +405,10 @@ function updateAdminControls() {
 export function configureProduction(adapter) {
   document.title = "HOK Database · Level Up Indonesia";
   productionDatabaseAdapter = adapter;
-  productionMode = true;
-  previewViewerPassword = "";
-  previewAdminPassword = "";
-  document.querySelector("#access-preview-note")?.remove();
-  document.querySelector("#admin-preview-note")?.remove();
   document.querySelector("#access-form label[for='access-password']").textContent = "Viewer password";
   document.querySelector("#access-gate .access-panel > p:not(.eyebrow)").textContent = "Enter the viewer password to browse match results, drafts, and team stats.";
   document.querySelector("#access-password").focus();
-  document.querySelector("#connect-database-button").hidden = true;
-  document.querySelector("#continue-to-entry").textContent = "Save scheduled match →";
+  document.querySelector("#continue-to-entry").textContent = "Enter results →";
   document.querySelector("#save-match-button").textContent = "Save completed match →";
   restoreProductionSession();
 }
@@ -564,15 +422,12 @@ async function restoreProductionSession() {
     accessGate.hidden = true;
     appShell.hidden = false;
     updateAdminControls();
+    startRealtimeRefresh();
   } catch (error) {
     const accessError = document.querySelector("#access-error");
     accessError.textContent = `Could not restore Supabase session: ${error.message}`;
     accessError.hidden = false;
   }
-}
-
-function isReadOnlyDatabase() {
-  return liveDataMode && (!productionDatabaseAdapter || !productionDatabaseAdapter.canWrite);
 }
 
 function getTournamentPayload() {
@@ -602,7 +457,7 @@ function getTournamentPayload() {
 }
 
 async function persistTournamentChanges() {
-  if (!productionDatabaseAdapter?.canWrite) return;
+  if (!productionDatabaseAdapter?.canWrite) throw new Error("Admin database access is required.");
   await productionDatabaseAdapter.saveTournaments(getTournamentPayload());
 }
 
@@ -624,84 +479,6 @@ async function showDatabaseWriteError(scope, error) {
   }
 }
 
-function validatePublicAnonKey(key) {
-  if (key.startsWith("sb_secret_")) throw new Error("A secret/service_role key is not allowed. Use the public anon or publishable key.");
-  const tokenPart = key.split(".")[1];
-  if (!tokenPart) return;
-  try {
-    const normalized = tokenPart.replace(/-/g, "+").replace(/_/g, "/");
-    const payload = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")));
-    if (payload.role === "service_role") {
-      throw new Error("A service_role key is not allowed. Use the public anon or publishable key.");
-    }
-  } catch (error) {
-    if (error.message.includes("service_role")) throw error;
-  }
-}
-
-function updateDatabaseConnectionButton(connected) {
-  document.querySelector("#connect-database-button").textContent = connected ? "Refresh" : "Connect Supabase";
-}
-
-async function connectToDatabase(projectUrl, anonKey, credentials) {
-  const normalizedUrl = projectUrl.trim().replace(/\/+$/, "");
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(normalizedUrl)) {
-    throw new Error("Enter a valid https://<project>.supabase.co URL.");
-  }
-  const publicKey = anonKey.trim();
-  if (!publicKey) throw new Error("Enter the project's public anon key.");
-  validatePublicAnonKey(publicKey);
-  let session = credentials?.accessToken ? credentials : null;
-  if (!session) {
-    const response = await fetch(`${normalizedUrl}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: { apikey: publicKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ email: credentials.email.trim(), password: credentials.password }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.access_token) {
-      throw new Error(result.msg || result.message || result.error_description || `Supabase sign-in failed (HTTP ${response.status}).`);
-    }
-    session = { accessToken: result.access_token, refreshToken: result.refresh_token };
-  }
-  let snapshot;
-  try {
-    snapshot = await loadDatabaseSnapshot(normalizedUrl, publicKey, session.accessToken);
-  } catch (error) {
-    if (!session.refreshToken || !error.message.includes("HTTP 401")) throw error;
-    const response = await fetch(`${normalizedUrl}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      headers: { apikey: publicKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: session.refreshToken }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.access_token) {
-      throw new Error(result.msg || result.message || result.error_description || `Supabase session refresh failed (HTTP ${response.status}).`);
-    }
-    session = { accessToken: result.access_token, refreshToken: result.refresh_token };
-    snapshot = await loadDatabaseSnapshot(normalizedUrl, publicKey, session.accessToken);
-  }
-  sessionStorage.setItem(databaseSessionKey, JSON.stringify({
-    url: normalizedUrl,
-    anonKey: publicKey,
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
-  }));
-  matchDetails = snapshot.matches;
-  teamRosters.clear();
-  snapshot.rosters.forEach((members, key) => teamRosters.set(key, members));
-  tournamentSettings = snapshot.settings;
-  leagueTeams = Object.fromEntries(Object.entries(snapshot.settings).map(([league, config]) => [
-    league, config.participants.map((participant) => participant.team)
-  ]));
-  sampleTournamentNames = new Set();
-  leagueOptions = Object.keys(tournamentSettings);
-  liveDataMode = true;
-  hasAdminAccess = false;
-  updateDatabaseConnectionButton(true);
-  setPage(activePage);
-}
-
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("show");
@@ -712,7 +489,7 @@ function showToast(message) {
 function setPage(page) {
   const label = pageLabels[page];
   if (!label) return;
-  if (page === "tournaments" && !(productionMode ? productionDatabaseAdapter?.canWrite : hasAdminAccess)) return;
+  if (page === "tournaments" && !productionDatabaseAdapter?.canWrite) return;
   activePage = page;
   navItems.forEach((item) => {
     const active = item.dataset.page === page;
@@ -720,7 +497,7 @@ function setPage(page) {
     if (active) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
   });
-  document.title = `${label} - HOK Database UI Preview`;
+  document.title = `${label} · HOK Database`;
 
   if (page === "matches") {
     pageContent.innerHTML = startingContent;
@@ -754,7 +531,7 @@ function getTeamAbbreviation(tournament, team) {
 function getPlayoffStageOptions(tournament) {
   const config = tournamentSettings[tournament] || {};
   const stages = config.bracketFormat === "single-elimination"
-    ? ["Playoffs Round 1", "Quarterfinals", "Semifinals", "Final"]
+    ? ["Round 1", "Quarterfinals", "Semifinals", "Grand Final"]
     : ["Upper Bracket Quarterfinals", "Upper Bracket Semifinals", "Upper Bracket Final", "Lower Bracket Round 1", "Lower Bracket Quarterfinals", "Lower Bracket Semifinals", "Lower Bracket Final", "Grand Final"];
   return config.playInEnabled ? ["Play-In Stage", ...stages] : stages;
 }
@@ -774,6 +551,7 @@ function normalizeBracketStage(stage, phase) {
   if (/\blower\b/.test(normalized) && /\bfinal\b/.test(normalized)) return "Lower Bracket Final";
   if (/\bquarter ?finals?\b/.test(normalized)) return "Quarterfinals";
   if (/\bsemi ?finals?\b/.test(normalized)) return "Semifinals";
+  if (/^round\s+\d+$/.test(normalized)) return `Round ${normalized.match(/\d+$/)[0]}`;
   if (/^playoffs?\s+round\s+\d+$/.test(normalized)) return `Playoffs Round ${normalized.match(/\d+$/)[0]}`;
   if (/^(group|group stage)(\s|$)/.test(normalized)) return label.replace(/^group$/i, "Group Stage");
   return label;
@@ -781,7 +559,7 @@ function normalizeBracketStage(stage, phase) {
 
 function getBracketStageOrder(stage) {
   const order = [
-    "Play-In Stage", "Playoffs Round 1", "Upper Bracket Quarterfinals",
+    "Play-In Stage", "Round 1", "Playoffs Round 1", "Upper Bracket Quarterfinals",
     "Lower Bracket Round 1", "Upper Bracket Semifinals", "Lower Bracket Quarterfinals",
     "Upper Bracket Final", "Lower Bracket Semifinals",
     "Lower Bracket Final", "Final", "Grand Final",
@@ -790,11 +568,7 @@ function getBracketStageOrder(stage) {
   return index < 0 ? order.length : index;
 }
 
-function renderModuleHeading(page, description) {
-  const pageTitles = {
-    standings: "Standings", players: "Player stats", roster: "Roster",
-    compare: "Head to head", awards: "Achievements", tournaments: "Tournaments"
-  };
+function renderModuleHeading() {
   const options = [...leagueOptions, "All leagues"].map((league) =>
     `<option value="${escapeHTML(league === "All leagues" ? "all" : league)}">${escapeHTML(league)}</option>`
   ).join("");
@@ -838,25 +612,21 @@ function collectPlayerStats(league) {
   })).sort((a, b) => b.kda - a.kda || b.kills - a.kills);
 }
 
-function getStandings(league, phase = standingsStage) {
+function getStandings(league) {
   const phaseMatches = Object.values(matchDetails).filter((match) =>
     (league === "all" || match.league === league)
-    && (phase === "playoffs" ? match.phase === "Playoffs" : match.phase !== "Playoffs")
+    && match.phase !== "Playoffs"
   );
-  const teams = phase === "playoffs"
-    ? [...new Set(phaseMatches.flatMap((match) => [match.teamA, match.teamB]))]
-    : getLeagueTeams(league);
+  const teams = getLeagueTeams(league);
   const standings = new Map(teams.map((team) => [team, {
-    team, played: 0, wins: 0, losses: 0, gameWins: 0, gameLosses: 0, bracketStages: new Set()
+    team, played: 0, wins: 0, losses: 0, gameWins: 0, gameLosses: 0
   }]));
   phaseMatches.forEach((match) => {
     [match.teamA, match.teamB].forEach((team) => {
-      if (!standings.has(team)) standings.set(team, { team, played: 0, wins: 0, losses: 0, gameWins: 0, gameLosses: 0, bracketStages: new Set() });
+      if (!standings.has(team)) standings.set(team, { team, played: 0, wins: 0, losses: 0, gameWins: 0, gameLosses: 0 });
     });
     const a = standings.get(match.teamA);
     const b = standings.get(match.teamB);
-    a.bracketStages.add(normalizeBracketStage(match.stage, match.phase));
-    b.bracketStages.add(normalizeBracketStage(match.stage, match.phase));
     if (!match.finished) return;
     a.played += 1; b.played += 1;
     a.gameWins += match.scoreA; a.gameLosses += match.scoreB;
@@ -873,30 +643,136 @@ function renderStandings(league) {
     ? leagueOptions.some((tournament) => tournamentSettings[tournament]?.playoffsEnabled)
     : !!tournamentSettings[league]?.playoffsEnabled;
   if (!playoffAvailable && standingsStage === "playoffs") standingsStage = "group";
-  const standings = getStandings(league, standingsStage);
-  const stageLabel = standingsStage === "playoffs" ? "Playoffs · includes Play-ins" : "Group Stage";
+  const stageSelector = `<label class="select-wrap"><span class="sr-only">Standings stage</span><select data-standings-stage aria-label="Standings stage"><option value="group" ${standingsStage === "group" ? "selected" : ""}>Group Stage</option>${playoffAvailable ? `<option value="playoffs" ${standingsStage === "playoffs" ? "selected" : ""}>Playoffs</option>` : ""}</select><span class="select-chevron">⌄</span></label>`;
+  if (standingsStage === "playoffs") return renderPlayoffBrackets(league, stageSelector);
+  const standings = getStandings(league);
   return `<section class="content-card module-card">
-    <div class="section-heading standings-heading"><div><h2>${escapeHTML(stageLabel)} standings</h2></div><label class="select-wrap"><span class="sr-only">Standings stage</span><select data-standings-stage aria-label="Standings stage"><option value="group" ${standingsStage === "group" ? "selected" : ""}>Group Stage</option>${playoffAvailable ? `<option value="playoffs" ${standingsStage === "playoffs" ? "selected" : ""}>Playoffs · includes Play-ins</option>` : ""}</select><span class="select-chevron">⌄</span></label></div>
-    <div class="module-table-wrap"><table class="module-table"><thead><tr><th>#</th><th>TEAM</th><th>BRACKET STAGE</th><th>MP</th><th>W</th><th>L</th><th>GAME SCORE</th><th>GAME DIFF</th></tr></thead>
-      <tbody>${standings.map((row, index) => {
-        const stages = [...row.bracketStages].sort((a, b) => getBracketStageOrder(a) - getBracketStageOrder(b) || a.localeCompare(b));
-        return `<tr><td class="rank-cell">${String(index + 1).padStart(2, "0")}</td><td><strong class="module-team-name">${escapeHTML(row.team)}</strong></td><td>${escapeHTML(stages.join(", ") || stageLabel)}</td><td>${row.played}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.gameWins}-${row.gameLosses}</td><td><strong>${row.gameDiff > 0 ? "+" : ""}${row.gameDiff}</strong></td></tr>`;
+    <div class="section-heading standings-heading"><div><h2>Group Stage standings</h2></div>${stageSelector}</div>
+    <div class="module-table-wrap"><table class="module-table"><thead><tr><th>#</th><th>TEAM</th><th>MP</th><th>W</th><th>L</th><th>GAME SCORE</th><th>GAME DIFF</th></tr></thead>
+      <tbody>${standings.map((row, index) => `<tr><td class="rank-cell">${String(index + 1).padStart(2, "0")}</td><td><strong class="module-team-name">${escapeHTML(row.team)}</strong></td><td>${row.played}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.gameWins}-${row.gameLosses}</td><td><strong>${row.gameDiff > 0 ? "+" : ""}${row.gameDiff}</strong></td></tr>`).join("")}</tbody>
+    </table></div>
+  </section>`;
+}
+
+function renderPlayoffBrackets(league, stageSelector) {
+  const tournaments = league === "all"
+    ? leagueOptions.filter((entry) => tournamentSettings[entry]?.playoffsEnabled)
+    : [league];
+  const brackets = tournaments.map((tournament) => {
+    const matches = Object.entries(matchDetails)
+      .filter(([, match]) => match.league === tournament && match.phase === "Playoffs")
+      .map(([id, match]) => ({ ...match, id }));
+    const rounds = new Map();
+    matches.forEach((match) => {
+      const stage = normalizeBracketStage(match.stage, match.phase);
+      if (!rounds.has(stage)) rounds.set(stage, []);
+      rounds.get(stage).push(match);
+    });
+    const sortedRounds = [...rounds.entries()].sort(([stageA], [stageB]) =>
+      getBracketStageOrder(stageA) - getBracketStageOrder(stageB) || stageA.localeCompare(stageB)
+    );
+    const roundMarkup = sortedRounds.map(([stage, stageMatches]) => `<section class="bracket-round">
+      <header><span>${escapeHTML(stage)}</span><small>${stageMatches.length} ${stageMatches.length === 1 ? "match" : "matches"}</small></header>
+      <div class="bracket-round-matches">${stageMatches.sort((a, b) => getMatchInstant(a) - getMatchInstant(b)).map((match) => {
+        const completed = match.finished && Number.isInteger(match.scoreA) && Number.isInteger(match.scoreB);
+        const winner = completed ? (match.scoreA > match.scoreB ? match.teamA : match.teamB) : "";
+        return `<article class="bracket-match" data-open-match="${escapeHTML(match.id)}" tabindex="0" role="button" aria-label="Open ${escapeHTML(match.teamA)} versus ${escapeHTML(match.teamB)} details">
+          <div class="bracket-match-meta"><span>${escapeHTML(getMatchLocalDate(match) || "Date TBD")}</span><span>${escapeHTML(match.format || "")}</span></div>
+          <div class="bracket-team ${winner === match.teamA ? "bracket-winner" : ""}"><span>${escapeHTML(match.teamA)}</span><strong>${completed ? match.scoreA : "–"}</strong></div>
+          <div class="bracket-team ${winner === match.teamB ? "bracket-winner" : ""}"><span>${escapeHTML(match.teamB)}</span><strong>${completed ? match.scoreB : "–"}</strong></div>
+        </article>`;
+      }).join("")}</div>
+    </section>`).join("");
+    return `<section class="playoff-tournament"><div class="playoff-tournament-heading"><h3>${escapeHTML(tournament)}</h3><span>${tournamentSettings[tournament]?.bracketFormat === "single-elimination" ? "Single elimination" : "Double elimination"}</span></div>
+      ${roundMarkup ? `<div class="playoff-bracket-scroll"><div class="playoff-bracket">${roundMarkup}</div></div>` : '<p class="bracket-empty">No playoff matches have been scheduled yet.</p>'}
+    </section>`;
+  }).join("");
+  return `<section class="content-card module-card playoff-module">
+    <div class="section-heading standings-heading"><div><h2>Playoffs bracket</h2><p>Rounds and results are built from playoff matches.</p></div>${stageSelector}</div>
+    ${brackets || '<p class="bracket-empty">No playoff tournament is available.</p>'}
+  </section>`;
+}
+
+function renderPlayerStats(league) {
+  const columns = [
+    { key: "name", label: "PLAYER", numeric: false }, { key: "team", label: "TEAM", numeric: false },
+    { key: "games", label: "GAMES", numeric: true }, { key: "kdaLine", label: "K/D/A", numeric: false },
+    { key: "kda", label: "KDA", numeric: true }, { key: "kp", label: "KP", numeric: true },
+    { key: "goldAverage", label: "GOLD", numeric: true }, { key: "damageAverage", label: "HERO DMG", numeric: true },
+    { key: "damageTakenAverage", label: "DMG TAKEN", numeric: true },
+    ...[1, 2, 3, 4, 5].map((count) => ({ key: `multi${count}`, label: `${count}K`, numeric: true })),
+    { key: "mvp", label: "MVP", numeric: true }, { key: "firstBlood", label: "FIRST BLOOD", numeric: true },
+  ];
+  const players = collectPlayerStats(league).map((player) => ({
+    ...player,
+    teamLabel: getTeamAbbreviation(player.tournament, player.team),
+    kdaLine: `${player.kills}/${player.deaths}/${player.assists}`,
+    goldAverage: Math.round(player.gold / player.games),
+    damageAverage: Math.round(player.damage / player.games),
+    damageTakenAverage: Math.round(player.damageTaken / player.games),
+    ...Object.fromEntries([1, 2, 3, 4, 5].map((count) => [`multi${count}`, player.multiKills[count]])),
+  }));
+  const valueFor = (player, key) => key === "team" ? player.teamLabel : player[key];
+  players.sort((a, b) => {
+    const column = columns.find((entry) => entry.key === playerStatsSort.key) || columns[0];
+    const valueA = valueFor(a, column.key);
+    const valueB = valueFor(b, column.key);
+    const comparison = column.numeric
+      ? Number(valueA) - Number(valueB)
+      : String(valueA).localeCompare(String(valueB), undefined, { numeric: true, sensitivity: "base" });
+    return playerStatsSort.direction === "asc" ? comparison : -comparison;
+  });
+  const sortHeader = (column) => {
+    const active = playerStatsSort.key === column.key;
+    const direction = active ? playerStatsSort.direction : "none";
+    const icon = active ? (direction === "asc" ? "↑" : "↓") : "↕";
+    return `<button type="button" class="player-sort-button ${active ? "active" : ""}" data-player-sort="${column.key}" data-numeric="${column.numeric}" aria-label="Sort ${escapeHTML(column.label)} ${direction === "asc" ? "descending" : "ascending"}">${escapeHTML(column.label)} <span>${icon}</span></button>`;
+  };
+  const filterRow = columns.map((column) => `<th><input class="player-column-filter" data-player-filter="${column.key}" value="${escapeHTML(playerStatsFilters[column.key] || "")}" placeholder="Filter" aria-label="Filter ${escapeHTML(column.label)}" /></th>`).join("");
+  return `<section class="content-card module-card">
+    <div class="section-heading player-stats-heading"><div><h2>Player leaderboard</h2><p id="player-filter-count">${players.length} players</p></div><button type="button" class="button button-secondary" id="clear-player-filters">Clear filters</button></div>
+    <div class="module-table-wrap"><table class="module-table player-module-table"><thead><tr>${columns.map(sortHeader).map((header) => `<th>${header}</th>`).join("")}</tr><tr class="player-filter-row">${filterRow}</tr></thead>
+      <tbody>${players.map((player, index) => {
+        const values = columns.map((column) => String(valueFor(player, column.key)));
+        const valueAttributes = values.map((value, columnIndex) => ` data-filter-value="${escapeHTML(value.toLowerCase())}" data-filter-column="${columns[columnIndex].key}"`);
+        return `<tr class="player-stat-row"><td${valueAttributes[0]}><span class="player-rank">${String(index + 1).padStart(2, "0")}</span><strong class="module-team-name">${escapeHTML(player.name)}</strong><small class="table-sub">${escapeHTML(player.lane)}</small></td><td${valueAttributes[1]}>${escapeHTML(player.teamLabel)}</td><td${valueAttributes[2]}>${player.games}</td><td${valueAttributes[3]}>${player.kdaLine}</td><td${valueAttributes[4]}><strong>${player.kda}</strong></td><td${valueAttributes[5]}>${player.kp}%</td><td${valueAttributes[6]}>${player.goldAverage.toLocaleString("en-US")}</td><td${valueAttributes[7]}>${player.damageAverage.toLocaleString("en-US")}</td><td${valueAttributes[8]}>${player.damageTakenAverage.toLocaleString("en-US")}</td>${[1, 2, 3, 4, 5].map((count, offset) => `<td${valueAttributes[9 + offset]}>${player[`multi${count}`]}</td>`).join("")}<td${valueAttributes[14]}>${player.mvp}</td><td${valueAttributes[15]}>${player.firstBlood}</td></tr>`;
       }).join("")}</tbody>
     </table></div>
   </section>`;
 }
 
-function renderPlayerStats(league) {
-  const players = collectPlayerStats(league);
-  return `<section class="content-card module-card">
-    <div class="section-heading"><h2>Player leaderboard</h2></div>
-    <div class="module-table-wrap"><table class="module-table player-module-table"><thead><tr><th>PLAYER</th><th>TEAM</th><th>GAMES</th><th>K/D/A</th><th>KDA</th><th>KP</th><th>GOLD</th><th>HERO DMG</th><th>DMG TAKEN</th><th>1K</th><th>2K</th><th>3K</th><th>4K</th><th>5K</th><th>MVP</th><th>FIRST BLOOD</th></tr></thead>
-      <tbody>${players.slice(0, 12).map((player, index) => {
-        const teamAbbr = getTeamAbbreviation(player.tournament, player.team);
-        return `<tr><td><span class="player-rank">${String(index + 1).padStart(2, "0")}</span><strong class="module-team-name">${escapeHTML(player.name)}</strong><small class="table-sub">${escapeHTML(player.lane)}</small></td><td>${escapeHTML(teamAbbr)}</td><td>${player.games}</td><td>${player.kills}/${player.deaths}/${player.assists}</td><td><strong>${player.kda}</strong></td><td>${player.kp}%</td><td>${Math.round(player.gold / player.games).toLocaleString("en-US")}</td><td>${Math.round(player.damage / player.games).toLocaleString("en-US")}</td><td>${Math.round(player.damageTaken / player.games).toLocaleString("en-US")}</td>${[1, 2, 3, 4, 5].map((count) => `<td>${player.multiKills[count]}</td>`).join("")}<td>${player.mvp}</td><td>${player.firstBlood}</td></tr>`;
-      }).join("")}</tbody>
-    </table></div>
-  </section>`;
+function bindPlayerStatsControls(league) {
+  const applyFilters = () => {
+    const filters = [...document.querySelectorAll("[data-player-filter]")].map((input) => {
+      const value = input.value.trim().toLowerCase();
+      playerStatsFilters[input.dataset.playerFilter] = input.value;
+      return { key: input.dataset.playerFilter, value };
+    });
+    let visible = 0;
+    document.querySelectorAll(".player-stat-row").forEach((row) => {
+      const matches = filters.every(({ key, value }) => !value || row.querySelector(`[data-filter-column="${key}"]`)?.dataset.filterValue.includes(value));
+      row.hidden = !matches;
+      if (matches) {
+        visible += 1;
+        row.querySelector(".player-rank").textContent = String(visible).padStart(2, "0");
+      }
+    });
+    document.querySelector("#player-filter-count").textContent = `${visible} players`;
+  };
+  document.querySelectorAll("[data-player-filter]").forEach((input) => input.addEventListener("input", applyFilters));
+  document.querySelectorAll("[data-player-sort]").forEach((button) => button.addEventListener("click", () => {
+    const key = button.dataset.playerSort;
+    playerStatsSort = playerStatsSort.key === key
+      ? { key, direction: playerStatsSort.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: button.dataset.numeric === "true" ? "desc" : "asc" };
+    renderModulePage("players", league);
+  }));
+  document.querySelector("#clear-player-filters")?.addEventListener("click", () => {
+    Object.keys(playerStatsFilters).forEach((key) => delete playerStatsFilters[key]);
+    document.querySelectorAll("[data-player-filter]").forEach((input) => { input.value = ""; });
+    applyFilters();
+  });
+  applyFilters();
 }
 
 function collectRoster(league) {
@@ -911,13 +787,16 @@ function renderRoster(league) {
   const roster = collectRoster(league);
   const tournaments = league === "all" ? leagueOptions : [league];
   const teams = tournaments.flatMap((tournament) => getLeagueTeams(tournament).map((team) => ({ team, tournament })));
-  const canEdit = productionMode ? !!productionDatabaseAdapter?.canWrite : hasAdminAccess;
-  return `<section class="roster-summary-grid"><article class="roster-summary"><span>TEAMS</span><strong>${teams.length}</strong><small>In selected league</small></article><article class="roster-summary"><span>REGISTERED PLAYERS</span><strong>${roster.length}</strong><small>${liveDataMode ? "Players" : "Across sample team rosters"}</small></article></section>
-    <section class="content-card module-card"><div class="section-heading"><div><h2>Team rosters</h2><p>${liveDataMode ? "Roster grouped by tournament and team." : "Sample lineup grouped by team and lane."}</p></div>${liveDataMode ? "" : '<span class="sample-tag">SAMPLE</span>'}</div>
+  const canEdit = !!productionDatabaseAdapter?.canWrite;
+  return `<section class="roster-summary-grid"><article class="roster-summary"><span>TEAMS</span><strong>${teams.length}</strong><small>In selected league</small></article><article class="roster-summary"><span>REGISTERED PLAYERS</span><strong>${roster.length}</strong><small>Players</small></article></section>
+    <section class="content-card module-card"><div class="section-heading"><div><h2>Team rosters</h2><p>Roster grouped by tournament and team.</p></div></div>
       <div class="roster-team-grid">${teams.map(({ team, tournament }) => {
         const members = roster.filter((player) => player.team === team && player.tournament === tournament);
+        const qualificationRoute = tournamentSettings[tournament]?.participants
+          .find((participant) => participant.team === team)?.route || "Route not set";
         const memberRows = members.map((player) => {
-          return `<div><span>${escapeHTML(player.lane.replace(" Lane", ""))}</span><strong title="${escapeHTML(player.identity || player.id)}">${escapeHTML(player.name)}${player.identity ? ` <small>· ${escapeHTML(player.identity)}</small>` : ""}</strong>${canEdit ? `<button type="button" class="roster-edit-toggle" data-toggle-roster-edit="${escapeHTML(player.id)}" aria-expanded="false">Edit</button><button type="button" class="danger-button" data-remove-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}">Remove</button><form class="roster-edit-form" data-edit-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}" hidden><label>Nickname<input name="name" required maxlength="40" value="${escapeHTML(player.name)}" /></label><label>Identity note<input name="identity" maxlength="60" value="${escapeHTML(player.identity || "")}" /></label><label>Role<select name="role">${[...lanes, "Substitute", "Coach", "Analyst"].map((role) => `<option ${player.lane === role ? "selected" : ""}>${escapeHTML(role)}</option>`).join("")}</select></label><button type="submit" class="button button-secondary">Save player</button></form>` : ""}</div>`;
+          const roleLabel = player.lane === "Substitute" ? "SUBS" : player.lane.replace(" Lane", "");
+          return `<div><span class="roster-role ${player.lane === "Substitute" ? "roster-role-sub" : ""}">${escapeHTML(roleLabel)}</span><strong title="${escapeHTML(player.identity || player.id)}">${escapeHTML(player.name)}${player.identity ? ` <small>· ${escapeHTML(player.identity)}</small>` : ""}</strong>${canEdit ? `<button type="button" class="roster-edit-toggle" data-toggle-roster-edit="${escapeHTML(player.id)}" aria-expanded="false">Edit</button><button type="button" class="danger-button" data-remove-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}">Remove</button><form class="roster-edit-form" data-edit-roster="${escapeHTML(player.id)}" data-roster-team="${escapeHTML(team)}" data-roster-tournament="${escapeHTML(tournament)}" hidden><label>Nickname<input name="name" required maxlength="40" value="${escapeHTML(player.name)}" /></label><label>Identity note<input name="identity" maxlength="60" value="${escapeHTML(player.identity || "")}" /></label><label>Role<select name="role">${[...lanes, "Substitute", "Coach", "Analyst"].map((role) => `<option ${player.lane === role ? "selected" : ""}>${escapeHTML(role)}</option>`).join("")}</select></label><button type="submit" class="button button-secondary">Save player</button></form>` : ""}</div>`;
         }).join("");
         const addForm = canEdit ? `<form class="roster-add-form" data-add-roster="${escapeHTML(tournament)}" data-roster-team="${escapeHTML(team)}">
           <label>Nickname<input name="name" required maxlength="40" placeholder="Player nickname" /></label>
@@ -925,7 +804,7 @@ function renderRoster(league) {
           <label>Role<select name="role">${[...lanes, "Substitute", "Coach", "Analyst"].map((role) => `<option>${escapeHTML(role)}</option>`).join("")}</select></label>
           <button type="submit" class="button button-secondary">Add to roster</button>
         </form>` : "";
-        return `<article class="roster-team-card"><header><span class="team-monogram">${escapeHTML(getTeamAbbreviation(tournament, team))}</span><div><strong>${escapeHTML(team)}</strong><small>${escapeHTML(tournament)} · ${members.length} roster members</small></div></header>
+        return `<article class="roster-team-card"><header><span class="team-monogram">${escapeHTML(getTeamAbbreviation(tournament, team))}</span><div><strong>${escapeHTML(team)}</strong><span class="roster-card-meta"><small>${escapeHTML(tournament)} · ${members.length} roster members</small><span class="roster-route">${escapeHTML(qualificationRoute)}</span></span></div></header>
           <div class="roster-player-list">${memberRows || "<p>No roster members registered yet.</p>"}</div>${addForm}</article>`;
       }).join("")}</div>
     </section>`;
@@ -936,9 +815,7 @@ function getHeadToHead(teamA, teamB, league) {
     (match.teamA === teamA && match.teamB === teamB) || (match.teamA === teamB && match.teamB === teamA)
   ).map((match) => ({
     ...match,
-    winner: match.scoreA > match.scoreB ? match.teamA : match.teamB,
-    gamesA: match.teamA === teamA ? match.scoreA : match.scoreB,
-    gamesB: match.teamA === teamA ? match.scoreB : match.scoreA
+    winner: match.scoreA > match.scoreB ? match.teamA : match.teamB
   }));
 }
 
@@ -957,16 +834,16 @@ function renderHeadToHead(league) {
   const playerWinsB = playerGames.filter((entry) => entry.playerBWonGame).length;
   const playerOptions = (selectedId) => players.map((player) => `<option value="${escapeHTML(player.id)}" ${player.id === selectedId ? "selected" : ""}>${escapeHTML(player.name)} · ${escapeHTML(player.team)} · ${escapeHTML(player.lane)}</option>`).join("");
   return `<section class="content-card module-card">
-    <div class="section-heading"><div><h2>Head-to-head comparison</h2><p>Compare event results between teams or players.</p></div>${liveDataMode ? "" : '<span class="sample-tag">SAMPLE</span>'}</div>
+    <div class="section-heading"><div><h2>Head-to-head comparison</h2><p>Compare event results between teams or players.</p></div></div>
     <div class="h2h-mode-switch" role="group" aria-label="Comparison type"><button type="button" class="active" data-h2h-mode="teams" aria-pressed="true">Team vs team</button><button type="button" data-h2h-mode="players" aria-pressed="false">Player vs player</button></div>
     <div class="h2h-panel" data-h2h-panel="teams">
       <div class="compare-controls"><label class="field-label">Team A<select id="compare-team-a">${teams.map((team) => `<option ${team === first ? "selected" : ""}>${escapeHTML(team)}</option>`).join("")}</select></label><span>VS</span><label class="field-label">Team B<select id="compare-team-b">${teams.map((team) => `<option ${team === second ? "selected" : ""}>${escapeHTML(team)}</option>`).join("")}</select></label></div>
-      <div class="compare-score-card" id="compare-results"><div><strong id="compare-name-a">${escapeHTML(first)}</strong><span>Series wins</span></div><b id="compare-score">${winsA} : ${winsB}</b><div><strong id="compare-name-b">${escapeHTML(second)}</strong><span>Series wins</span></div></div>
+      <div class="compare-score-card"><div><strong id="compare-name-a">${escapeHTML(first)}</strong><span>Series wins</span></div><b id="compare-score">${winsA} : ${winsB}</b><div><strong id="compare-name-b">${escapeHTML(second)}</strong><span>Series wins</span></div></div>
       <div class="compare-match-list" id="compare-match-list">${renderComparedMatches(matches)}</div>
     </div>
     <div class="h2h-panel" data-h2h-panel="players" hidden>
       <div class="compare-controls"><label class="field-label">Player A<select id="compare-player-a">${playerOptions(playerA?.id)}</select></label><span>VS</span><label class="field-label">Player B<select id="compare-player-b">${playerOptions(playerB?.id)}</select></label></div>
-      <div class="compare-score-card" id="player-compare-results"><div><strong id="compare-player-name-a">${escapeHTML(playerA?.name || "No player data")}</strong><span id="compare-player-team-a">${escapeHTML(playerA?.team || "")}</span></div><b id="compare-player-score">${playerWinsA} : ${playerWinsB}</b><div><strong id="compare-player-name-b">${escapeHTML(playerB?.name || "Select player")}</strong><span id="compare-player-team-b">${escapeHTML(playerB?.team || "")}</span></div></div>
+      <div class="compare-score-card"><div><strong id="compare-player-name-a">${escapeHTML(playerA?.name || "No player data")}</strong><span id="compare-player-team-a">${escapeHTML(playerA?.team || "")}</span></div><b id="compare-player-score">${playerWinsA} : ${playerWinsB}</b><div><strong id="compare-player-name-b">${escapeHTML(playerB?.name || "Select player")}</strong><span id="compare-player-team-b">${escapeHTML(playerB?.team || "")}</span></div></div>
       <div class="compare-match-list" id="player-compare-list">${renderPlayerComparedGames(playerGames)}</div>
     </div>
   </section>`;
@@ -1004,7 +881,7 @@ function renderPlayerComparedGames(games) {
 
 function renderComparedMatches(matches) {
   return matches.length ? matches.map((match) => `<div class="compare-match-row"><span>${escapeHTML(match.league)}</span><strong>${escapeHTML(match.teamA)} ${match.scoreA} : ${match.scoreB} ${escapeHTML(match.teamB)}</strong><small>${escapeHTML(match.stage)} · ${escapeHTML(match.date)}</small></div>`).join("")
-    : `<p class="module-footnote">No direct ${liveDataMode ? "recorded" : "sample"} match between these teams in this league yet.</p>`;
+    : `<p class="module-footnote">No direct recorded match between these teams in this league yet.</p>`;
 }
 
 function renderAchievements(league) {
@@ -1017,27 +894,20 @@ function renderAchievements(league) {
     seriesWins.set(winner, (seriesWins.get(winner) || 0) + 1);
   });
   const teamLeader = [...seriesWins.entries()].sort((a, b) => b[1] - a[1])[0];
+  const firstBloodLeader = [...players].sort((a, b) => b.firstBlood - a.firstBlood)[0];
   const awards = [
     { icon: "★", title: "MVP leader", recipient: mvpLeader?.name || "No MVP yet", detail: `${mvpLeader?.mvp || 0} game MVP awards · ${mvpLeader?.team || ""}` },
     { icon: "⚔", title: "Series leader", recipient: teamLeader?.[0] || "No results yet", detail: `${teamLeader?.[1] || 0} series wins in this league` },
     { icon: "◎", title: "Top KDA", recipient: players[0]?.name || "No player data", detail: `${players[0]?.kda || "0.00"} KDA · ${players[0]?.team || ""}` },
-    { icon: "♧", title: "First blood", recipient: players.sort((a, b) => b.firstBlood - a.firstBlood)[0]?.name || "No first blood yet", detail: `${players.sort((a, b) => b.firstBlood - a.firstBlood)[0]?.firstBlood || 0} first bloods recorded` }
+    { icon: "♧", title: "First blood", recipient: firstBloodLeader?.name || "No first blood yet", detail: `${firstBloodLeader?.firstBlood || 0} first bloods recorded` }
   ];
-  return `<section class="achievement-grid">${awards.map((award, index) => `<article class="achievement-card"><span class="achievement-icon achievement-icon-${index}">${award.icon}</span><small>${escapeHTML(award.title)}</small><strong>${escapeHTML(award.recipient)}</strong><p>${escapeHTML(award.detail)}</p>${liveDataMode ? "" : '<span class="sample-tag">SAMPLE AWARD</span>'}</article>`).join("")}</section>
-    <section class="content-card module-card"><div class="section-heading"><div><h2>Milestone board</h2><p>Highlights are calculated from ${liveDataMode ? "live Supabase match records" : "the sample match records"}.</p></div></div>
+  return `<section class="achievement-grid">${awards.map((award, index) => `<article class="achievement-card"><span class="achievement-icon achievement-icon-${index}">${award.icon}</span><small>${escapeHTML(award.title)}</small><strong>${escapeHTML(award.recipient)}</strong><p>${escapeHTML(award.detail)}</p></article>`).join("")}</section>
+    <section class="content-card module-card"><div class="section-heading"><div><h2>Milestone board</h2><p>Highlights are calculated from live Supabase match records.</p></div></div>
       <div class="milestone-list"><div><strong>${matches.length}</strong><span>series recorded</span></div><div><strong>${players.reduce((sum, player) => sum + player.mvp, 0)}</strong><span>MVP awards assigned</span></div><div><strong>${players.reduce((sum, player) => sum + player.firstBlood, 0)}</strong><span>first bloods recorded</span></div></div></section>`;
 }
 
 function renderModulePage(page, league = leagueOptions[0]) {
-  const title = pageLabels[page];
-  const descriptions = {
-    standings: "League table built from recorded results.",
-    players: "Performance leaders across games in the selected league.",
-    roster: "View registered players and manage leagues and team entries.",
-    compare: "Compare direct team series and player game records.",
-    awards: liveDataMode ? "Player and team achievements from recorded live results." : "Sample player and team achievements from the season."
-  };
-  pageContent.innerHTML = `${renderModuleHeading(page, descriptions[page])}
+  pageContent.innerHTML = `${renderModuleHeading()}
     <div class="module-content" id="module-content">${renderModuleContent(page, league)}</div>
     <footer class="page-footer"><span>© 2026 Level Up Indonesia</span></footer>`;
   pageContent.querySelector("[data-module-league]").value = league;
@@ -1049,6 +919,19 @@ function renderModulePage(page, league = leagueOptions[0]) {
     renderModulePage(page, pageContent.querySelector("[data-module-league]").value);
   });
   if (page === "roster") bindRosterManagement();
+  if (page === "players") bindPlayerStatsControls(league);
+  if (page === "standings" && standingsStage === "playoffs") {
+    pageContent.querySelectorAll("[data-open-match]").forEach((card) => {
+      const open = () => openMatchDetails(card.dataset.openMatch);
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open();
+        }
+      });
+    });
+  }
   if (page === "compare") bindCompareControls(league);
 }
 
@@ -1069,12 +952,9 @@ function renderTournamentPage() {
       );
       const hasRoster = getTeamRoster(tournament, participant.team).length > 0;
       const cannotRemove = usedByMatch || hasRoster;
-      return `<tr><td><strong>${escapeHTML(participant.team)}</strong></td><td>${escapeHTML(participant.abbreviation)}</td><td>${escapeHTML(participant.route)}</td><td>${usedByMatch ? "Match history" : hasRoster ? "Roster registered" : "No history"}</td><td>${hasAdminAccess && !isReadOnlyDatabase() ? `<button type="button" class="participant-edit-toggle" data-toggle-participant="${escapeHTML(participant.team)}" aria-expanded="false">Edit</button><button type="button" class="danger-button" data-remove-participant="${escapeHTML(participant.team)}" data-tournament="${escapeHTML(tournament)}" ${cannotRemove ? `disabled title="${usedByMatch ? "This team has match history" : "Remove the team's roster first"}."` : ""}>Remove</button>` : ""}</td></tr>${hasAdminAccess && !isReadOnlyDatabase() ? `<tr class="participant-edit-row" data-participant-edit-row="${escapeHTML(participant.team)}" hidden><td colspan="5"><form class="participant-edit-form" data-edit-participant="${escapeHTML(participant.team)}" data-tournament="${escapeHTML(tournament)}"><label>Team name<input name="team" required maxlength="60" value="${escapeHTML(participant.team)}" /></label><label>ABBR<input name="abbreviation" required maxlength="10" value="${escapeHTML(participant.abbreviation)}" /></label><label>Qualification route<select name="route">${qualificationRoutes.map((route) => `<option ${participant.route === route ? "selected" : ""}>${escapeHTML(route)}</option>`).join("")}</select></label><button type="submit" class="button button-secondary">Save team</button><button type="button" class="participant-edit-cancel" data-cancel-participant="${escapeHTML(participant.team)}">Cancel</button></form></td></tr>` : ""}`;
+      return `<tr><td><strong>${escapeHTML(participant.team)}</strong></td><td>${escapeHTML(participant.abbreviation)}</td><td>${escapeHTML(participant.route)}</td><td>${usedByMatch ? "Match history" : hasRoster ? "Roster registered" : "No history"}</td><td><button type="button" class="participant-edit-toggle" data-toggle-participant="${escapeHTML(participant.team)}" aria-expanded="false">Edit</button><button type="button" class="danger-button" data-remove-participant="${escapeHTML(participant.team)}" data-tournament="${escapeHTML(tournament)}" ${cannotRemove ? `disabled title="${usedByMatch ? "This team has match history" : "Remove the team's roster first"}."` : ""}>Remove</button></td></tr><tr class="participant-edit-row" data-participant-edit-row="${escapeHTML(participant.team)}" hidden><td colspan="5"><form class="participant-edit-form" data-edit-participant="${escapeHTML(participant.team)}" data-tournament="${escapeHTML(tournament)}"><label>Team name<input name="team" required maxlength="60" value="${escapeHTML(participant.team)}" /></label><label>ABBR<input name="abbreviation" required maxlength="10" value="${escapeHTML(participant.abbreviation)}" /></label><label>Qualification route<select name="route">${qualificationRoutes.map((route) => `<option ${participant.route === route ? "selected" : ""}>${escapeHTML(route)}</option>`).join("")}</select></label><button type="submit" class="button button-secondary">Save team</button><button type="button" class="participant-edit-cancel" data-cancel-participant="${escapeHTML(participant.team)}">Cancel</button></form></td></tr>`;
     }).join("");
-    const fields = isReadOnlyDatabase()
-      ? `<p class="module-footnote">Supabase is connected in read-only mode. Tournament changes are disabled.</p>`
-      : hasAdminAccess
-      ? `<form class="tournament-edit-form" data-edit-tournament="${escapeHTML(tournament)}">
+    const fields = `<form class="tournament-edit-form" data-edit-tournament="${escapeHTML(tournament)}">
           <label>Tournament name<input name="name" required maxlength="80" value="${escapeHTML(tournament)}" /></label>
           <label class="checkbox-field"><input name="globalBanPick" type="checkbox" ${config.globalBanPick ? "checked" : ""} /> Global Ban & Pick</label>
           <label class="checkbox-field"><input name="playoffsEnabled" type="checkbox" ${config.playoffsEnabled ? "checked" : ""} /> Include playoffs</label>
@@ -1088,44 +968,31 @@ function renderTournamentPage() {
           <label>Team abbreviation<input name="abbreviation" required maxlength="10" placeholder="BTR" /></label>
           <label>Qualification route<select name="route">${qualificationRoutes.map((route) => `<option>${escapeHTML(route)}</option>`).join("")}</select></label>
           <button type="submit" class="button button-primary">Add participant</button>
-        </form>`
-      : `<p class="module-footnote">Unlock admin tools to edit tournament settings and participants.</p>`;
+        </form>`;
     const playoffDescription = config?.playoffsEnabled
       ? `${config.bracketFormat === "single-elimination" ? "Single elimination" : "Double elimination"}${config.playInEnabled ? " · Play-in" : ""}`
       : "Group Stage only";
-    return `<article class="content-card tournament-card"><header class="section-heading"><div><h2>${escapeHTML(tournament)}</h2><p>${escapeHTML(playoffDescription)} · ${config?.globalBanPick ? "Global Ban & Pick" : "Standard draft"} · ${(config?.participants || []).length} participants</p></div>${liveDataMode ? "" : `<span class="sample-tag">${hasAdminAccess ? "ADMIN" : "SAMPLE"}</span>`}</header>
+    return `<article class="content-card tournament-card"><header class="section-heading"><div><h2>${escapeHTML(tournament)}</h2><p>${escapeHTML(playoffDescription)} · ${config?.globalBanPick ? "Global Ban & Pick" : "Standard draft"} · ${(config?.participants || []).length} participants</p></div></header>
       ${fields}
       <div class="module-table-wrap"><table class="module-table participant-table"><thead><tr><th>TEAM</th><th>ABBR</th><th>QUALIFICATION ROUTE</th><th>HISTORY</th><th></th></tr></thead><tbody>${teamRows || '<tr><td colspan="5">No participants added yet.</td></tr>'}</tbody></table></div>
     </article>`;
   }).join("");
-  const createForm = isReadOnlyDatabase()
-    ? `<div class="management-actions"><p>Supabase is connected in read-only mode. Tournament creation is disabled.</p></div>`
-    : hasAdminAccess
-    ? `<form id="create-tournament-form" class="tournament-create-form">
+  const createForm = `<form id="create-tournament-form" class="tournament-create-form">
         <label>Tournament name<input name="name" required maxlength="80" placeholder="e.g. HOK Spring Cup" /></label>
         <label class="checkbox-field"><input name="globalBanPick" type="checkbox" /> Global Ban & Pick</label>
         <label class="checkbox-field"><input name="playoffsEnabled" type="checkbox" checked /> Include playoffs</label>
         <label>Playoff format<select name="bracketFormat"><option value="double-elimination" selected>Double elimination</option><option value="single-elimination">Single elimination</option></select></label>
         <label class="checkbox-field"><input name="playInEnabled" type="checkbox" /> Include Play-In stage</label>
         <button type="submit" class="button button-primary">Create tournament</button>
-      </form>`
-    : `<div class="management-actions"><p>Admin access is required to create tournaments or edit participants.</p><button type="button" class="button button-secondary" data-unlock-tournaments>Unlock admin tools</button></div>`;
+      </form>`;
   pageContent.innerHTML = `<section class="page-heading module-page-heading"><div><p class="eyebrow">EVENT WORKSPACE · SETUP FIRST</p><h1>Tournaments</h1><p class="heading-copy">Set up an event before registering its rosters and entering matches.</p></div></section>
-    <section class="content-card module-card"><div class="section-heading"><div><h2>Competition setup</h2><p>1. Create a tournament · 2. Register teams and qualification routes · 3. Add each team’s event roster · 4. Record matches.</p></div><span class="sample-tag">EVENT SETUP</span></div>${createForm}</section>
+    <section class="content-card module-card"><div class="section-heading"><div><h2>Competition setup</h2><p>1. Create a tournament · 2. Register teams and qualification routes · 3. Add each team’s event roster · 4. Record matches.</p></div><span class="section-tag">EVENT SETUP</span></div>${createForm}</section>
     <div class="module-content tournament-list">${tournamentCards}</div>
-    <details class="content-card tournament-help"><summary>How to add, edit, and delete tournaments or teams</summary><ol>
-      <li>Unlock admin tools, enter the tournament name, choose whether playoffs are single- or double-elimination, and enable Play-In if the event uses it.</li>
-      <li>In that tournament card, add every participating team. Enter its abbreviation manually and select its entry route.</li>
-      <li>To rename or change tournament settings, edit the tournament and save. Rename is blocked when roster or match history already refers to the tournament.</li>
-      <li>Use Remove on a participant only before it has match history. A tournament with match history cannot be deleted, protecting results.</li>
-      <li>Register the tournament-specific roster from the Roster page. Nicknames are stored as distinct roster entries per tournament/team.</li>
-    </ol><p>${productionDatabaseAdapter?.canWrite ? "Changes are saved to Supabase after admin verification." : "All changes in this preview are temporary and stay in browser memory."}</p></details>
     <footer class="page-footer"><span>© 2026 Level Up Indonesia</span></footer>`;
   bindTournamentControls();
 }
 
 function bindTournamentControls() {
-  document.querySelector("[data-unlock-tournaments]")?.addEventListener("click", () => requestAdminAccess(() => renderTournamentPage()));
   document.querySelector("#create-tournament-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -1144,17 +1011,12 @@ function bindTournamentControls() {
       playInEnabled: form.elements.namedItem("playInEnabled").checked,
       participants: []
     };
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await persistTournamentChanges();
-        await finishDatabaseWrite("Tournament created in Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Tournament", error);
-      }
-      return;
+    try {
+      await persistTournamentChanges();
+      await finishDatabaseWrite("Tournament created in Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Tournament", error);
     }
-    renderTournamentPage();
-    showToast("Tournament created in this preview.");
   });
   document.querySelectorAll("[data-edit-tournament]").forEach((form) => form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1184,7 +1046,6 @@ function bindTournamentControls() {
       Object.values(matchDetails).forEach((match) => {
         if (match.league === oldName) {
           match.league = newName;
-          match.tournamentId = newName;
           match.games?.forEach((game) => [...game.playersA, ...game.playersB].forEach((player) => {
             if (player.playerId) player.playerId = player.playerId.replace(oldName, newName);
           }));
@@ -1198,17 +1059,12 @@ function bindTournamentControls() {
         }
       }
     }
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await persistTournamentChanges();
-        await finishDatabaseWrite("Tournament settings saved to Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Tournament settings", error);
-      }
-      return;
+    try {
+      await persistTournamentChanges();
+      await finishDatabaseWrite("Tournament settings saved to Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Tournament settings", error);
     }
-    renderTournamentPage();
-    showToast("Tournament settings saved in this preview.");
   }));
   document.querySelectorAll("[data-add-participant]").forEach((form) => form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1223,17 +1079,12 @@ function bindTournamentControls() {
     participants.push({ team, abbreviation, route: form.elements.namedItem("route").value });
     leagueTeams[tournament].push(team);
     teamRosters.set(rosterKey(tournament, team), []);
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await persistTournamentChanges();
-        await finishDatabaseWrite("Team added to tournament in Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Team registration", error);
-      }
-      return;
+    try {
+      await persistTournamentChanges();
+      await finishDatabaseWrite("Team added to tournament in Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Team registration", error);
     }
-    renderTournamentPage();
-    showToast("Tournament participant added.");
   }));
   document.querySelectorAll("[data-toggle-participant]").forEach((button) => button.addEventListener("click", () => {
     const team = button.dataset.toggleParticipant;
@@ -1259,7 +1110,7 @@ function bindTournamentControls() {
       showToast("This team already exists in the tournament.");
       return;
     }
-    if (newName !== oldName && productionDatabaseAdapter?.canWrite) {
+    if (newName !== oldName) {
       try {
         await productionDatabaseAdapter.renameTeam(tournament, oldName, newName);
       } catch (error) {
@@ -1285,23 +1136,17 @@ function bindTournamentControls() {
         if (match.league !== tournament) return;
         if (match.teamA === oldName) match.teamA = newName;
         if (match.teamB === oldName) match.teamB = newName;
-        if (match.winner === oldName) match.winner = newName;
         match.games?.forEach((game) => {
           if (game.winner === oldName) game.winner = newName;
         });
       });
     }
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await persistTournamentChanges();
-        await finishDatabaseWrite("Team details saved to Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Team details", error);
-      }
-      return;
+    try {
+      await persistTournamentChanges();
+      await finishDatabaseWrite("Team details saved to Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Team details", error);
     }
-    renderTournamentPage();
-    showToast("Team details updated in this preview.");
   }));
   document.querySelectorAll("[data-remove-participant]").forEach((button) => button.addEventListener("click", async () => {
     if (button.disabled) return;
@@ -1310,17 +1155,12 @@ function bindTournamentControls() {
     tournamentSettings[tournament].participants = tournamentSettings[tournament].participants.filter((participant) => participant.team !== team);
     leagueTeams[tournament] = leagueTeams[tournament].filter((participant) => participant !== team);
     teamRosters.delete(rosterKey(tournament, team));
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await persistTournamentChanges();
-        await finishDatabaseWrite("Team removed from tournament in Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Team removal", error);
-      }
-      return;
+    try {
+      await persistTournamentChanges();
+      await finishDatabaseWrite("Team removed from tournament in Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Team removal", error);
     }
-    renderTournamentPage();
-    showToast("Participant removed from this preview.");
   }));
   document.querySelectorAll("[data-delete-tournament]").forEach((button) => button.addEventListener("click", async () => {
     if (button.disabled) return;
@@ -1330,17 +1170,12 @@ function bindTournamentControls() {
     delete leagueTeams[tournament];
     delete tournamentSettings[tournament];
     for (const key of teamRosters.keys()) if (key.startsWith(`${tournament}|`)) teamRosters.delete(key);
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await persistTournamentChanges();
-        await finishDatabaseWrite("Tournament deleted from Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Tournament deletion", error);
-      }
-      return;
+    try {
+      await persistTournamentChanges();
+      await finishDatabaseWrite("Tournament deleted from Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Tournament deletion", error);
     }
-    renderTournamentPage();
-    showToast("Tournament deleted from this preview.");
   }));
 }
 
@@ -1358,24 +1193,12 @@ function bindRosterManagement() {
       showToast("This nickname and role already exist. Add a unique identity note to distinguish this player.");
       return;
     }
-    const newMember = { id: `${rosterKey(tournament, team)}|${Date.now()}|${Math.random().toString(36).slice(2, 8)}`, name, identity, role };
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        const id = await productionDatabaseAdapter.saveRoster({
-          name, identity, role, tournament, team
-        });
-        newMember.id = String(id);
-        members.push(newMember);
-        await finishDatabaseWrite("Roster member saved to Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Roster member", error);
-      }
-      return;
+    try {
+      await productionDatabaseAdapter.saveRoster({ name, identity, role, tournament, team });
+      await finishDatabaseWrite("Roster member saved to Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Roster member", error);
     }
-    members.push(newMember);
-    const activeTournament = document.querySelector("[data-module-league]").value;
-    renderModulePage("roster", activeTournament);
-    showToast("Roster member added in this preview.");
   }));
   document.querySelectorAll("[data-toggle-roster-edit]").forEach((button) => button.addEventListener("click", () => {
     const form = document.querySelector(`[data-edit-roster="${CSS.escape(button.dataset.toggleRosterEdit)}"]`);
@@ -1398,106 +1221,22 @@ function bindRosterManagement() {
       showToast("This nickname and role already exist. Add a unique identity note to distinguish this player.");
       return;
     }
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await productionDatabaseAdapter.saveRoster({ id, name, identity, role, tournament, team });
-        await finishDatabaseWrite("Roster member updated in Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Roster member", error);
-      }
-      return;
+    try {
+      await productionDatabaseAdapter.saveRoster({ id, name, identity, role, tournament, team });
+      await finishDatabaseWrite("Roster member updated in Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Roster member", error);
     }
-    const member = members.find((player) => player.id === id);
-    if (member) Object.assign(member, { name, identity, role });
-    renderModulePage("roster", document.querySelector("[data-module-league]").value);
-    showToast("Roster member updated in this preview.");
   }));
   document.querySelectorAll("[data-remove-roster]").forEach((button) => button.addEventListener("click", async () => {
     if (button.disabled) return;
-    const tournament = button.dataset.rosterTournament;
-    const team = button.dataset.rosterTeam;
     const id = button.dataset.removeRoster;
-    if (productionDatabaseAdapter?.canWrite) {
-      try {
-        await productionDatabaseAdapter.deleteRoster(id);
-        await finishDatabaseWrite("Roster member removed from Supabase.");
-      } catch (error) {
-        await showDatabaseWriteError("Roster deletion", error);
-      }
-      return;
+    try {
+      await productionDatabaseAdapter.deleteRoster(id);
+      await finishDatabaseWrite("Roster member removed from Supabase.");
+    } catch (error) {
+      await showDatabaseWriteError("Roster deletion", error);
     }
-    teamRosters.set(rosterKey(tournament, team), getTeamRoster(tournament, team).filter((player) => player.id !== id));
-    renderModulePage("roster", document.querySelector("[data-module-league]").value);
-    showToast("Roster member removed from this preview.");
-  }));
-}
-
-function renderCompetitionManager() {
-  const management = document.querySelector("#competition-manager");
-  if (!management || !hasAdminAccess) return;
-  const leagueCards = leagueOptions.map((league) => {
-    const teams = getLeagueTeams(league);
-    const hasMatches = Object.values(matchDetails).some((match) => match.league === league);
-    return `<article class="competition-league-card">
-      <header><div><strong>${escapeHTML(league)}</strong><small>${teams.length} teams · ${hasMatches ? "has match history" : "no match history"}</small></div>
-        <button type="button" class="danger-button" data-delete-league="${escapeHTML(league)}" ${hasMatches ? "disabled title=\"League has match history and cannot be deleted.\"" : ""}>Delete league</button></header>
-      <div class="managed-team-list">${teams.map((team) => {
-        const hasHistory = Object.values(matchDetails).some((match) => match.league === league && (match.teamA === team || match.teamB === team));
-        return `<div><span>${escapeHTML(team)}${hasHistory ? '<small> · history</small>' : ""}</span><button type="button" class="danger-button" data-delete-team="${escapeHTML(team)}" data-team-league="${escapeHTML(league)}" ${hasHistory ? "disabled title=\"Team has match history and cannot be removed.\"" : ""}>Remove</button></div>`;
-      }).join("")}</div>
-      <form class="add-team-form" data-add-team="${escapeHTML(league)}"><label>Add a team<input name="team" required maxlength="60" placeholder="e.g. Team Nova" /></label><button type="submit" class="button button-secondary">Add team</button></form>
-    </article>`;
-  }).join("");
-  management.innerHTML = `<div class="competition-manager">
-    <div class="manager-intro"><strong>Competition management</strong><p>Add leagues and assign teams. Deletion is blocked when historical matches depend on that entry.</p></div>
-    <form id="add-league-form" class="add-league-form"><label>New league name<input name="league" required maxlength="80" placeholder="e.g. HOK Spring Cup" /></label><button type="submit" class="button button-primary">Add league</button></form>
-    <div class="competition-league-list">${leagueCards}</div>
-    <p class="module-footnote">These controls demonstrate the intended admin workflow. Changes stay in this browser preview and are not saved to Supabase.</p>
-  </div>`;
-  management.querySelector("#add-league-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const input = event.currentTarget.elements.namedItem("league");
-    const name = input.value.trim();
-    if (!name || leagueOptions.some((league) => league.toLowerCase() === name.toLowerCase())) {
-      showToast("Enter a unique league name.");
-      return;
-    }
-    leagueOptions.push(name);
-    leagueTeams[name] = [];
-    renderCompetitionManager();
-    renderModulePage("roster", name);
-    showToast("League added in this preview.");
-  });
-  management.querySelectorAll(".add-team-form").forEach((form) => form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const league = form.dataset.addTeam;
-    const input = form.elements.namedItem("team");
-    const name = input.value.trim();
-    if (!name || getLeagueTeams(league).some((team) => team.toLowerCase() === name.toLowerCase())) {
-      showToast("Enter a unique team name for this league.");
-      return;
-    }
-    leagueTeams[league].push(name);
-    renderModulePage("roster", league);
-    showToast("Team added to the league in this preview.");
-  }));
-  management.querySelectorAll("[data-delete-team]").forEach((button) => button.addEventListener("click", () => {
-    if (button.disabled) return;
-    const league = button.dataset.teamLeague;
-    const team = button.dataset.deleteTeam;
-    if (!window.confirm(`Remove ${team} from ${league}?`)) return;
-    leagueTeams[league] = getLeagueTeams(league).filter((entry) => entry !== team);
-    renderModulePage("roster", league);
-    showToast("Team removed from this preview.");
-  }));
-  management.querySelectorAll("[data-delete-league]").forEach((button) => button.addEventListener("click", () => {
-    if (button.disabled) return;
-    const league = button.dataset.deleteLeague;
-    if (!window.confirm(`Delete ${league} and its teams?`)) return;
-    delete leagueTeams[league];
-    leagueOptions.splice(leagueOptions.indexOf(league), 1);
-    renderModulePage("roster", leagueOptions[0] || "all");
-    showToast("League deleted from this preview.");
   }));
 }
 
@@ -1548,7 +1287,7 @@ function bindCompareControls(league) {
 
 function bindMatchPage() {
   const addMatchButton = document.querySelector("#add-match-button");
-  addMatchButton.hidden = !(productionMode ? productionDatabaseAdapter?.canWrite : hasAdminAccess);
+  addMatchButton.hidden = !productionDatabaseAdapter?.canWrite;
   addMatchButton.addEventListener("click", () => requestAdminAccess());
   document.querySelector("#match-search").addEventListener("input", updateResults);
   document.querySelector("#result-filter").addEventListener("change", (event) => {
@@ -1566,9 +1305,6 @@ function bindMatchPage() {
   document.querySelector("#results-body").addEventListener("click", (event) => {
     const button = event.target.closest("[data-match-id]");
     if (button) openMatchDetails(button.dataset.matchId);
-  });
-  document.querySelectorAll("button[data-match-id]").forEach((button) => {
-    button.addEventListener("click", () => openMatchDetails(button.dataset.matchId));
   });
   syncMatchLeagueOptions();
   updateLeagueView();
@@ -1598,7 +1334,7 @@ function updateResults() {
   const selectedLeague = document.querySelector("#result-filter").value === "All leagues"
     ? "all"
     : document.querySelector("#result-filter").value;
-  const rows = [...document.querySelectorAll("#results-body tr")];
+  const rows = [...document.querySelectorAll("#results-body .result-row")];
   let visibleCount = 0;
   rows.forEach((row) => {
     const matchesText = row.dataset.teams.includes(query);
@@ -1671,7 +1407,7 @@ function updateLeagueView() {
   document.querySelectorAll("#schedule-list .schedule-row").forEach((row) => {
     row.hidden = league !== "all" && row.dataset.league !== league;
   });
-  document.querySelectorAll("#results-body tr").forEach((row) => {
+  document.querySelectorAll("#results-body .result-row").forEach((row) => {
     row.hidden = league !== "all" && row.dataset.league !== league;
   });
   updateResults();
@@ -1685,11 +1421,15 @@ function renderLiveMatchRows(league) {
     .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
   const completed = allMatches.filter((match) => match.finished
     && (league === "all" || match.league === league))
-    .sort((a, b) => b.dateISO.localeCompare(a.dateISO));
+    .sort((a, b) => {
+      const timeA = getMatchInstant(a)?.getTime() || 0;
+      const timeB = getMatchInstant(b)?.getTime() || 0;
+      return timeB - timeA;
+    });
   document.querySelector("#schedule-list").innerHTML = scheduled.map((match) => {
     const { year, month, day } = getMatchLocalDateParts(match) || {};
     const monthName = day && month ? new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(year, month - 1, day)).toUpperCase() : "TBD";
-    return `<article class="schedule-row" data-match-id="${escapeHTML(match.id)}" data-league="${escapeHTML(match.league)}" data-date="${escapeHTML(match.dateISO)}">
+    return `<article class="schedule-row" data-match-id="${escapeHTML(match.id)}" data-league="${escapeHTML(match.league)}">
       <div class="schedule-date"><strong>${day ? String(day).padStart(2, "0") : "—"}</strong><span>${monthName}</span></div>
       <div class="schedule-time">${escapeHTML(getMatchLocalTime(match) || "Time TBD")}</div>
       <div class="schedule-teams"><strong>${escapeHTML(match.teamA)}</strong><span class="schedule-vs">vs</span><strong>${escapeHTML(match.teamB)}</strong></div>
@@ -1700,14 +1440,16 @@ function renderLiveMatchRows(league) {
   }).join("");
   document.querySelector("#results-body").innerHTML = completed.map((match) => {
     const teamAWon = match.scoreA > match.scoreB;
-    const matchDate = getMatchLocalDate(match) || "Date not set";
-    return `<tr data-teams="${escapeHTML(`${match.teamA} ${match.teamB}`.toLowerCase())}" data-match-id="${escapeHTML(match.id)}" data-league="${escapeHTML(match.league)}">
-      <td><div class="result-teams"><strong>${escapeHTML(match.teamA)}</strong><span class="score ${teamAWon ? "winner-score" : ""}">${match.scoreA}</span><span class="score-separator">-</span><span class="score ${!teamAWon ? "winner-score" : ""}">${match.scoreB}</span><strong class="loser-name">${escapeHTML(match.teamB)}</strong></div></td>
-      <td><strong class="table-main">${escapeHTML(match.league)}</strong><small class="table-sub">${escapeHTML(match.stage)}</small></td>
-      <td><span class="table-main">${escapeHTML(matchDate)}</span><small class="table-sub">${escapeHTML(getMatchLocalTime(match))}</small></td>
-      <td><span class="result-badge complete-badge">Completed</span></td><td><span class="format-pill">${escapeHTML(match.format)}</span></td>
-      <td><button class="row-action detail-row-button" data-match-id="${escapeHTML(match.id)}" aria-label="View ${escapeHTML(match.teamA)} vs ${escapeHTML(match.teamB)} details">Details <span>↗</span></button></td>
-    </tr>`;
+    const { year, month, day } = getMatchLocalDateParts(match) || {};
+    const monthName = day && month ? new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(year, month - 1, day)).toUpperCase() : "TBD";
+    return `<article class="schedule-row result-row" data-teams="${escapeHTML(`${match.teamA} ${match.teamB}`.toLowerCase())}" data-match-id="${escapeHTML(match.id)}" data-league="${escapeHTML(match.league)}">
+      <div class="schedule-date"><strong>${day ? String(day).padStart(2, "0") : "—"}</strong><span>${monthName}</span></div>
+      <div class="schedule-time">${escapeHTML(getMatchLocalTime(match) || "Time TBD")}</div>
+      <div class="schedule-teams result-schedule-teams"><strong class="${teamAWon ? "result-winner" : ""}">${escapeHTML(match.teamA)}</strong><span class="result-score">${match.scoreA}</span><span class="score-separator">–</span><span class="result-score">${match.scoreB}</span><strong class="${!teamAWon ? "result-winner" : ""}">${escapeHTML(match.teamB)}</strong></div>
+      <div class="schedule-league">${escapeHTML(match.league)}</div>
+      <span class="stage-pill">${escapeHTML(match.stage)}</span><span class="format-pill">${escapeHTML(match.format)}</span>
+      <button class="row-action" data-match-id="${escapeHTML(match.id)}" aria-label="View ${escapeHTML(match.teamA)} vs ${escapeHTML(match.teamB)} details" title="Match details">↗</button>
+    </article>`;
   }).join("");
   if (!completed.length) {
     document.querySelector("#no-results").hidden = false;
@@ -1730,6 +1472,14 @@ function updateFeaturedMatch(match) {
   card.querySelector("#next-match-detail").addEventListener("click", () => openMatchDetails(match.id));
 }
 
+function updateEntryPrimaryAction() {
+  const continueButton = document.querySelector("#continue-to-entry");
+  continueButton.innerHTML = editingMatchId && entryGameDrafts.length
+    ? 'Edit game results <span>→</span>'
+    : 'Enter results <span>→</span>';
+  document.querySelector("#save-match-button").textContent = editingMatchId ? "Save match changes" : "Save completed match";
+}
+
 function openModal(matchId = "") {
   document.querySelector("#match-form").reset();
   entryGameDrafts = [];
@@ -1749,9 +1499,7 @@ function openModal(matchId = "") {
     document.querySelector("#entry-team-b").value = match.teamB;
     document.querySelector("#entry-phase").value = match.phase === "Playoffs" ? "Playoffs" : "Group Stage";
     syncEntryStageOptions(match.league);
-    document.querySelector("#entry-stage").value = match.stage === match.phase ? "" : match.stage;
-    document.querySelector("#entry-status").value = match.finished ? "Completed" : "Scheduled";
-    document.querySelector("#entry-status option[value='Scheduled']").disabled = !!match.finished;
+    if (match.stage && match.stage !== match.phase) setEntryStageValue(match.stage);
     document.querySelector("#entry-format").value = match.format;
     document.querySelector("#entry-date").value = match.dateISO || toDateInputValue(match.date);
     document.querySelector("#entry-time").value = match.entryTime || toTimeInputValue(match.time || match.date);
@@ -1768,19 +1516,29 @@ function openModal(matchId = "") {
       picksB: game.playersB.map((player) => ({ ...player, playerId: player.playerId || getTeamRoster(match.league, match.teamB).find((member) => member.name === player.player && member.role === player.lane)?.id || "", multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, ...(player.multiKills || {}) } })),
     }));
     document.querySelector("#modal-title").textContent = "Edit match";
-    document.querySelector("#continue-to-entry").textContent = match.finished ? "Edit game results →" : "Save scheduled match →";
-    document.querySelector("#save-match-button").textContent = "Save match changes";
+    updateEntryPrimaryAction();
   } else {
     editingMatchId = "";
-    document.querySelector("#entry-status option[value='Scheduled']").disabled = false;
     document.querySelector("#modal-title").textContent = "Add a match";
-    document.querySelector("#continue-to-entry").textContent = "Preview scheduled match →";
-    document.querySelector("#save-match-button").textContent = "Preview result";
+    updateEntryPrimaryAction();
   }
-  showEntryStep(1);
+  const showExistingResults = entryGameDrafts.length > 0;
+  if (showExistingResults) {
+    syncEntryGameDraftCount();
+    currentEntryGame = 1;
+    renderEntryGameTabs();
+    renderEntryGamePanel();
+    updateEntrySeriesScore();
+  }
+  showEntryStep(showExistingResults ? 2 : 1);
   modal.hidden = false;
   document.body.style.overflow = "hidden";
-  modal.querySelector("select").focus();
+  const entryModal = modal.querySelector(".entry-modal");
+  const closeButton = modal.querySelector(".modal-heading .close-modal");
+  requestAnimationFrame(() => {
+    entryModal.scrollTop = 0;
+    closeButton.focus({ preventScroll: true });
+  });
 }
 
 function toTimeInputValue(value) {
@@ -1824,11 +1582,50 @@ function syncEntryPhaseOptions(tournament) {
 }
 
 function syncEntryStageOptions(tournament) {
-  const stageList = document.querySelector("#entry-stage-options");
-  if (!stageList) return;
+  const stageSelect = document.querySelector("#entry-stage");
+  const customInput = document.querySelector("#entry-custom-stage");
+  if (!stageSelect || !customInput) return;
+  const currentStage = getEntryStageValue();
   const isPlayoffs = document.querySelector("#entry-phase").value === "Playoffs";
   const stages = isPlayoffs ? getPlayoffStageOptions(tournament) : ["Group Stage"];
-  stageList.innerHTML = stages.map((stage) => `<option value="${escapeHTML(stage)}"></option>`).join("");
+  stageSelect.innerHTML = `${stages.map((stage) => `<option value="${escapeHTML(stage)}">${escapeHTML(stage)}</option>`).join("")}<option value="__custom__">Custom stage…</option>`;
+  if (stages.includes(currentStage)) {
+    stageSelect.value = currentStage;
+    customInput.value = "";
+  } else if (currentStage && currentStage !== "Group Stage") {
+    stageSelect.value = "__custom__";
+    customInput.value = currentStage;
+  } else {
+    stageSelect.value = stages[0];
+    customInput.value = "";
+  }
+  customInput.hidden = stageSelect.value !== "__custom__";
+  customInput.required = !customInput.hidden;
+}
+
+function getEntryStageValue() {
+  const stageSelect = document.querySelector("#entry-stage");
+  if (!stageSelect) return "";
+  return stageSelect.value === "__custom__"
+    ? document.querySelector("#entry-custom-stage").value.trim()
+    : stageSelect.value;
+}
+
+function setEntryStageValue(stage) {
+  const stageSelect = document.querySelector("#entry-stage");
+  const customInput = document.querySelector("#entry-custom-stage");
+  const normalizedStage = String(stage || "").trim();
+  if ([...stageSelect.options].some((option) => option.value === normalizedStage)) {
+    stageSelect.value = normalizedStage;
+    customInput.value = "";
+    customInput.hidden = true;
+    customInput.required = false;
+  } else {
+    stageSelect.value = "__custom__";
+    customInput.value = normalizedStage;
+    customInput.hidden = false;
+    customInput.required = true;
+  }
 }
 
 function syncEntryTeamOptions() {
@@ -1849,20 +1646,15 @@ function closeAdminAccess() {
 }
 
 function closeModal() {
+  modal.querySelector(".entry-modal").scrollTop = 0;
   modal.hidden = true;
   document.body.style.overflow = "";
   editingMatchId = "";
 }
 
 function showEntryStep(step) {
-  document.querySelector("#entry-step-one").hidden = step !== 1;
   document.querySelector("#entry-step-two").hidden = step !== 2;
-  document.querySelector("#step-one-number").classList.toggle("step-current", step === 1);
-  document.querySelector("#step-one-number").classList.toggle("step-next", step !== 1);
-  document.querySelector("#step-two-number").classList.toggle("step-current", step === 2);
-  document.querySelector("#step-two-number").classList.toggle("step-next", step !== 2);
-  document.querySelector(".step-label-current").classList.toggle("active-step-label", step === 1);
-  document.querySelector(".step-label-next").classList.toggle("active-step-label", step === 2);
+  document.querySelector(".entry-info-actions").hidden = step === 2;
 }
 
 function selectedTeamNames() {
@@ -1872,7 +1664,50 @@ function selectedTeamNames() {
   };
 }
 
-async function prepareEntryStepTwo() {
+function createBlankEntryGame(index) {
+  const tournament = document.querySelector("#entry-league").value;
+  const { teamA, teamB } = selectedTeamNames();
+  const rosterA = getTeamRoster(tournament, teamA);
+  const rosterB = getTeamRoster(tournament, teamB);
+  const createPicks = (roster) => lanes.map((lane) => ({
+    playerId: roster.find((player) => player.role === lane)?.id || "",
+    lane,
+    hero: "",
+    player: roster.find((player) => player.role === lane)?.name || "",
+    kills: 0, deaths: 0, assists: 0, gold: 0, damage: 0, damageTaken: 0,
+    multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, mvp: false, firstBlood: false
+  }));
+  return {
+    winner: "",
+    duration: "",
+    blueSide: index % 2 === 0 ? "A" : "B",
+    bansA: ["", "", "", ""],
+    bansB: ["", "", "", ""],
+    objectivesA: { Tyrant: 0, "Shadow Tyrant": 0, Tempest: 0, Overlord: 0, "Shadow Overlord": 0, Towers: 0 },
+    objectivesB: { Tyrant: 0, "Shadow Tyrant": 0, Tempest: 0, Overlord: 0, "Shadow Overlord": 0, Towers: 0 },
+    picksA: createPicks(rosterA),
+    picksB: createPicks(rosterB)
+  };
+}
+
+function syncEntryGameDraftCount() {
+  if (!entryGameDrafts.length) return false;
+  const maxGames = Number(document.querySelector("#entry-format").value.match(/\d+/)?.[0]) || 1;
+  const previousLength = entryGameDrafts.length;
+  if (previousLength < maxGames) {
+    for (let index = previousLength; index < maxGames; index += 1) entryGameDrafts.push(createBlankEntryGame(index));
+  } else if (previousLength > maxGames) {
+    entryGameDrafts = entryGameDrafts.slice(0, maxGames);
+  }
+  if (entryGameDrafts.length === previousLength) return false;
+  currentEntryGame = Math.min(currentEntryGame, entryGameDrafts.length);
+  renderEntryGameTabs();
+  renderEntryGamePanel();
+  updateEntrySeriesScore();
+  return true;
+}
+
+function prepareEntryStepTwo() {
   const form = document.querySelector("#match-form");
   if (!form.reportValidity()) return;
   const { teamA, teamB } = selectedTeamNames();
@@ -1880,7 +1715,8 @@ async function prepareEntryStepTwo() {
     showToast("Choose two different teams.");
     return;
   }
-  if (editingMatchId && document.querySelector("#entry-status").value === "Completed" && entryGameDrafts.length) {
+  if (editingMatchId && entryGameDrafts.length) {
+    syncEntryGameDraftCount();
     currentEntryGame = 1;
     renderEntryGameTabs();
     renderEntryGamePanel();
@@ -1888,74 +1724,39 @@ async function prepareEntryStepTwo() {
     showEntryStep(2);
     return;
   }
-  if (document.querySelector("#entry-status").value === "Scheduled") {
-    if (productionDatabaseAdapter?.canWrite) {
-      const button = document.querySelector("#continue-to-entry");
-      button.disabled = true;
-      try {
-        await productionDatabaseAdapter.saveSchedule(buildEntryPreviewMatch(), editingMatchId);
-        closeModal();
-        await finishDatabaseWrite("Match schedule saved to Supabase.");
-      } catch (error) {
-        showToast(`Schedule was not saved: ${error.message}`);
-      } finally {
-        button.disabled = false;
-      }
-      return;
-    }
-    matchDetails["entry-preview"] = buildEntryPreviewMatch();
-    closeModal();
-    openMatchDetails("entry-preview");
-    showToast("Scheduled match preview only — nothing was saved.");
-    return;
-  }
   const maxGames = Number(document.querySelector("#entry-format").value.match(/\d+/)?.[0]) || 1;
-  const seriesWinsNeeded = Math.floor(maxGames / 2) + 1;
-  const tournament = document.querySelector("#entry-league").value;
-  const rosterA = getTeamRoster(tournament, teamA);
-  const rosterB = getTeamRoster(tournament, teamB);
-  const globalBanPick = tournamentSettings[tournament]?.globalBanPick || false;
-  const usedHeroes = { A: new Set(), B: new Set() };
-  const seedHero = (gameIndex, side, laneIndex) => {
-    const preferred = heroDrafts[gameIndex % heroDrafts.length][side === "A" ? 0 : 1][laneIndex];
-    if (!globalBanPick) return preferred;
-    const hero = [preferred, ...heroOptions].find((candidate) => !usedHeroes[side].has(candidate)) || preferred;
-    usedHeroes[side].add(hero);
-    return hero;
-  };
-  entryGameDrafts = Array.from({ length: maxGames }, (_, index) => ({
-    winner: index < seriesWinsNeeded ? teamA : "",
-    duration: "",
-    blueSide: index % 2 === 0 ? "A" : "B",
-    bansA: ["", "", "", ""],
-    bansB: ["", "", "", ""],
-    objectivesA: { Tyrant: 1, "Shadow Tyrant": 0, Tempest: 0, Overlord: 0, "Shadow Overlord": 0, Towers: 3 },
-    objectivesB: { Tyrant: 0, "Shadow Tyrant": 0, Tempest: 0, Overlord: 1, "Shadow Overlord": 0, Towers: 1 },
-    picksA: lanes.map((lane, laneIndex) => ({
-      playerId: rosterA.find((player) => player.role === lane)?.id || "",
-      lane,
-      hero: seedHero(index, "A", laneIndex),
-      player: rosterA.find((player) => player.role === lane)?.name || "",
-      kills: statLinesA[laneIndex][0], deaths: statLinesA[laneIndex][1], assists: statLinesA[laneIndex][2],
-      gold: statLinesA[laneIndex][3], damage: statLinesA[laneIndex][4], damageTaken: statLinesA[laneIndex][5],
-      multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, mvp: false, firstBlood: false
-    })),
-    picksB: lanes.map((lane, laneIndex) => ({
-      playerId: rosterB.find((player) => player.role === lane)?.id || "",
-      lane,
-      hero: seedHero(index, "B", laneIndex),
-      player: rosterB.find((player) => player.role === lane)?.name || "",
-      kills: statLinesB[laneIndex][0], deaths: statLinesB[laneIndex][1], assists: statLinesB[laneIndex][2],
-      gold: statLinesB[laneIndex][3], damage: statLinesB[laneIndex][4], damageTaken: statLinesB[laneIndex][5],
-      multiKills: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, mvp: false, firstBlood: false
-    }))
-  }));
+  entryGameDrafts = Array.from({ length: maxGames }, (_, index) => createBlankEntryGame(index));
   currentEntryGame = 1;
   renderEntryGameTabs();
   renderEntryGamePanel();
   updateEntrySeriesScore();
   showEntryStep(2);
   document.querySelector("#entry-game-tabs button")?.focus();
+}
+
+async function saveEntrySchedule(button) {
+  const form = document.querySelector("#match-form");
+  if (!form.reportValidity()) return;
+  const { teamA, teamB } = selectedTeamNames();
+  if (teamA === teamB) {
+    showToast("Choose two different teams.");
+    return;
+  }
+  if (entrySeriesHasWinner()) {
+    showToast("This match already has a series winner. Use Save match changes to record it as completed.");
+    return;
+  }
+  button.disabled = true;
+  try {
+    const preview = buildEntryPreviewMatch();
+    await productionDatabaseAdapter.saveSchedule({ ...preview, finished: false, games: [] }, editingMatchId);
+    closeModal();
+    await finishDatabaseWrite("Match schedule saved to Supabase.");
+  } catch (error) {
+    showToast(`Schedule was not saved: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderEntryGameTabs() {
@@ -1971,23 +1772,26 @@ function calculateEntryKp(game, side, index) {
   return teamKills ? Math.round(((Number(player.kills) + Number(player.assists)) / teamKills) * 100) : 0;
 }
 
+function refreshEntryKpCells(game, side) {
+  game[`picks${side}`].forEach((_, index) => {
+    const cell = document.querySelector(`[data-entry-kp="${side}-${index}"]`);
+    if (cell) cell.textContent = `${calculateEntryKp(game, side, index)}%`;
+  });
+}
+
 function renderEntryGamePanel() {
   const { teamA, teamB } = selectedTeamNames();
   const game = entryGameDrafts[currentEntryGame - 1];
   const winnerOptions = `<option value="">Not played</option><option value="${escapeHTML(teamA)}" ${game.winner === teamA ? "selected" : ""}>${escapeHTML(teamA)}</option><option value="${escapeHTML(teamB)}" ${game.winner === teamB ? "selected" : ""}>${escapeHTML(teamB)}</option>`;
-  const renderPlayerTable = (side, team) => `<div class="entry-team-stats"><h3>${escapeHTML(team)} · ${side === game.blueSide ? "BLUE SIDE" : "RED SIDE"}</h3><div class="entry-stats-scroll"><table class="entry-stats-table"><thead><tr><th>ROLE</th><th>PLAYER</th><th>HERO</th><th>K/D/A</th><th>GOLD</th><th>HERO DMG</th><th>DMG TAKEN</th><th>KP</th><th>1K</th><th>2K</th><th>3K</th><th>4K</th><th>5K</th><th>MVP</th><th>FIRST BLOOD</th></tr></thead><tbody>${lanes.map((lane, index) => {
+  const renderPlayerTable = (side, team) => `<div class="entry-team-stats"><h3>${escapeHTML(team)} · ${side === game.blueSide ? "BLUE SIDE" : "RED SIDE"}</h3><div class="entry-stats-scroll"><table class="entry-stats-table"><thead><tr><th>ROLE</th><th>PLAYER</th><th>HERO</th><th>K</th><th>D</th><th>A</th><th>GOLD</th><th title="Hero damage">DMG</th><th title="Damage taken">TAKEN</th><th>KP</th><th>1K</th><th>2K</th><th>3K</th><th>4K</th><th>5K</th><th>MVP</th><th title="First Blood">FB</th></tr></thead><tbody>${lanes.map((lane, index) => {
     const pick = game[`picks${side}`][index];
     const roster = getTeamRoster(document.querySelector("#entry-league").value, team).filter((player) => player.role === lane);
-    const selectedMemberId = pick.playerId || roster.find((member) => member.name === pick.player)?.id || "";
-    const playerOptions = roster.map((player) => `<option value="${escapeHTML(player.id)}" ${player.id === selectedMemberId ? "selected" : ""}>${escapeHTML(player.identity ? `${player.name} · ${player.identity}` : player.name)}</option>`).join("");
-    const heroSelectOptions = heroOptions.map((hero) => {
-      const unavailable = isEntryHeroUnavailable(currentEntryGame - 1, side, index, hero);
-      return `<option ${hero === pick.hero ? "selected" : ""} ${unavailable && hero !== pick.hero ? "disabled" : ""}>${escapeHTML(hero)}</option>`;
-    }).join("");
+    const playerListId = `entry-player-options-${side}-${index}`;
+    const playerOptions = roster.map((player) => `<option value="${escapeHTML(player.name)}" label="${escapeHTML(player.identity || player.role)}"></option>`).join("");
     return `<tr><th scope="row">${escapeHTML(lane.replace(" Lane", ""))}</th>
-      <td><select aria-label="${escapeHTML(team)} ${escapeHTML(lane)} player" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="playerId">${playerOptions || '<option value="">Add this role to roster first</option>'}</select></td>
-      <td><select aria-label="${escapeHTML(team)} ${escapeHTML(lane)} hero" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="hero">${heroSelectOptions}</select></td>
-      <td><input aria-label="${escapeHTML(team)} ${escapeHTML(lane)} K/D/A" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="kda" value="${pick.kills}/${pick.deaths}/${pick.assists}" inputmode="numeric" pattern="\\d+/\\d+/\\d+" /></td>
+      <td><input list="${playerListId}" autocomplete="off" placeholder="Type player" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} player" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="player" value="${escapeHTML(pick.player || "")}" /><datalist id="${playerListId}">${playerOptions}</datalist></td>
+      <td><input list="entry-hero-options" autocomplete="off" placeholder="Type hero" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} hero" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="hero" value="${escapeHTML(pick.hero || "")}" /></td>
+      ${["kills", "deaths", "assists"].map((stat) => `<td><input type="number" min="0" step="1" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} ${stat}" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="${stat}" value="${pick[stat]}" /></td>`).join("")}
       ${["gold", "damage", "damageTaken"].map((stat) => `<td><input type="number" min="0" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} ${stat}" data-entry-side="${side}" data-entry-lane="${index}" data-entry-pick="${stat}" value="${pick[stat]}" /></td>`).join("")}
       <td class="entry-kp-cell" data-entry-kp="${side}-${index}">${calculateEntryKp(game, side, index)}%</td>
       ${[1, 2, 3, 4, 5].map((count) => `<td><input type="number" min="0" aria-label="${escapeHTML(team)} ${escapeHTML(lane)} ${count} kill streaks" data-entry-side="${side}" data-entry-lane="${index}" data-entry-multi-kill="${count}" value="${pick.multiKills?.[count] || 0}" /></td>`).join("")}
@@ -2000,6 +1804,11 @@ function renderEntryGamePanel() {
     <button type="button" class="side-choice ${game.blueSide === "B" ? "selected-blue" : ""}" data-blue-side="B" aria-pressed="${game.blueSide === "B"}">${escapeHTML(teamB)}</button>
     <small>The other team automatically starts on Red.</small>
   </div>`;
+  const renderBans = (side, team) => `<div class="entry-ban-team"><strong>${escapeHTML(team)}</strong><div class="entry-ban-selects">${Array.from({ length: 4 }, (_, index) => {
+    const selectedHero = game[`bans${side}`][index] || "";
+    return `<label><span>Ban ${index + 1}</span><input list="entry-hero-options" autocomplete="off" placeholder="Type hero" value="${escapeHTML(selectedHero)}" data-entry-side="${side}" data-entry-ban-index="${index}" aria-label="${escapeHTML(team)} banned hero ${index + 1}" /></label>`;
+  }).join("")}</div></div>`;
+  const heroDatalist = `<datalist id="entry-hero-options">${heroOptions.map((hero) => `<option value="${escapeHTML(hero)}"></option>`).join("")}</datalist>`;
   const objectives = ["Tyrant", "Shadow Tyrant", "Tempest", "Overlord", "Shadow Overlord", "Towers"];
   const renderObjectives = (side, team) => `<div class="entry-objective-team"><strong>${escapeHTML(team)}</strong>${objectives.map((objective) =>
     `<label>${escapeHTML(objective)}<input type="number" min="0" max="99" data-entry-side="${side}" data-entry-objective="${escapeHTML(objective)}" value="${game[`objectives${side}`][objective] || 0}" /></label>`
@@ -2010,28 +1819,13 @@ function renderEntryGamePanel() {
       <label class="field-label">Duration<input data-entry-field="duration" value="${escapeHTML(game.duration)}" placeholder="e.g. 18:42" /></label>
     </div>
     ${sidePicker}
-    <p class="input-helper">Enter K/D/A as kills/deaths/assists (for example 4/2/7). KP is calculated automatically as (kills + assists) ÷ team kills.${tournamentSettings[document.querySelector("#entry-league").value]?.globalBanPick ? " Global Ban & Pick prevents each team from reusing its own earlier picks in this series." : ""}</p>
+    ${heroDatalist}
+    <section class="entry-bans-section"><div class="entry-bans-heading"><strong>BANNED HEROES</strong><span>Type or choose four banned heroes for each team.</span></div><div class="entry-bans-grid">${renderBans("A", teamA)}${renderBans("B", teamB)}</div></section>
+    <p class="input-helper">Edit each cell directly, or paste tab-separated rows from a spreadsheet. KP is recalculated automatically and skipped during paste.${tournamentSettings[document.querySelector("#entry-league").value]?.globalBanPick ? " Global Ban & Pick prevents each team from reusing its own earlier picks in this series." : ""}</p>
     ${renderPlayerTable("A", teamA)}${renderPlayerTable("B", teamB)}
-    <div class="entry-bans-grid">
-      ${["A", "B"].map((side) => {
-        const team = side === "A" ? teamA : teamB;
-        const bans = game[`bans${side}`].join(", ");
-        return `<label class="field-label">${escapeHTML(team)} bans<input data-entry-side="${side}" data-entry-field="bans" value="${escapeHTML(bans)}" placeholder="Separate heroes with commas" /></label>`;
-      }).join("")}
-    </div>
-    <section class="entry-objectives"><div class="entry-objective-heading"><strong>OBJECTIVES TAKEN</strong><span>Enter the count secured by each team this game.</span></div>
+    <section class="entry-objectives"><div class="entry-objective-heading"><strong>OBJECTIVES TAKEN</strong><span>Enter counts directly or paste spreadsheet rows.</span></div>
       ${renderObjectives("A", teamA)}${renderObjectives("B", teamB)}
     </section>`;
-}
-
-function isEntryHeroUnavailable(gameIndex, side, laneIndex, hero) {
-  if (!tournamentSettings[document.querySelector("#entry-league").value]?.globalBanPick) return false;
-  const usedPreviously = entryGameDrafts.slice(0, gameIndex).some((game) =>
-    game[`picks${side}`].some((player) => player.hero === hero)
-  );
-  const alreadyPickedThisGame = entryGameDrafts[gameIndex][`picks${side}`]
-    .some((player, index) => index !== laneIndex && player.hero === hero);
-  return usedPreviously || alreadyPickedThisGame;
 }
 
 function updateEntrySeriesScore() {
@@ -2048,21 +1842,28 @@ function updateEntrySeriesScore() {
   document.querySelector("#entry-series-winner").textContent = winnerText;
 }
 
+function entrySeriesHasWinner() {
+  const { teamA, teamB } = selectedTeamNames();
+  const maxGames = Number(document.querySelector("#entry-format").value.match(/\d+/)?.[0]) || 1;
+  const requiredWins = Math.floor(maxGames / 2) + 1;
+  const winsA = entryGameDrafts.filter((game) => game.winner === teamA).length;
+  const winsB = entryGameDrafts.filter((game) => game.winner === teamB).length;
+  return Math.max(winsA, winsB) >= requiredWins;
+}
+
 function buildEntryPreviewMatch() {
   const { teamA, teamB } = selectedTeamNames();
-  const isCompleted = document.querySelector("#entry-status").value === "Completed";
+  const isCompleted = entrySeriesHasWinner();
   const games = isCompleted ? entryGameDrafts
     .map((draft, index) => ({ draft, index }))
     .filter(({ draft }) => draft.winner)
     .map(({ draft, index }) => ({
       gameNumber: index + 1,
       winner: draft.winner,
-      scoreA: draft.winner === teamA ? 1 : 0,
-      scoreB: draft.winner === teamB ? 1 : 0,
       duration: draft.duration || "—",
       blueSide: draft.blueSide,
-      bansA: draft.bansA.join(",").split(",").map((hero) => hero.trim()).filter(Boolean),
-      bansB: draft.bansB.join(",").split(",").map((hero) => hero.trim()).filter(Boolean),
+      bansA: draft.bansA.slice(0, 4).map((hero) => String(hero || "").trim()).filter(Boolean),
+      bansB: draft.bansB.slice(0, 4).map((hero) => String(hero || "").trim()).filter(Boolean),
       objectivesA: draft.objectivesA,
       objectivesB: draft.objectivesB,
       playersA: draft.picksA.map((player) => ({ ...player, multiKills: { ...player.multiKills }, kills: player.kills, deaths: player.deaths, assists: player.assists })),
@@ -2071,38 +1872,37 @@ function buildEntryPreviewMatch() {
   const scoreA = games.filter((game) => game.winner === teamA).length;
   const scoreB = games.filter((game) => game.winner === teamB).length;
   const rawDate = document.querySelector("#match-form input[type='date']").value;
-  const formattedDate = rawDate
-    ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dateFromISO(rawDate))
-    : "";
-  const stage = document.querySelector("#entry-stage").value.trim() || document.querySelector("#entry-phase").value;
+  const stage = getEntryStageValue() || document.querySelector("#entry-phase").value;
   const phase = document.querySelector("#entry-phase").value === "Playoffs" || isPlayoffStage(stage) ? "Playoffs" : "Group Stage";
   return {
     league: document.querySelector("#entry-league").value,
     teamA, teamB, scoreA: isCompleted ? scoreA : null, scoreB: isCompleted ? scoreB : null,
-    status: isCompleted ? "Completed" : "Scheduled",
     format: document.querySelector("#entry-format").value,
     phase,
     stage,
     time: document.querySelector("#entry-time").value,
     streamUrl: document.querySelector("#entry-stream").value.trim(),
-    tournamentId: document.querySelector("#entry-league").value,
     globalBanPick: tournamentSettings[document.querySelector("#entry-league").value]?.globalBanPick || false,
-    date: formattedDate,
+    dateISO: rawDate,
     finished: isCompleted,
     games
   };
 }
 
 function renderDraftSide(teamName, players, winner, side, blueSide) {
-  const picks = players.map((player) => `
-    <div class="draft-pick ${player.mvp ? "mvp-pick" : ""}">
+  const picks = players.map((player) => {
+    const multikills = [1, 2, 3, 4, 5]
+      .filter((count) => Number(player.multiKills?.[count]) > 0)
+      .map((count) => `<b class="pick-multikill"><span>${count}K</span> ×${player.multiKills[count]}</b>`)
+      .join("");
+    return `<div class="draft-pick ${player.mvp ? "mvp-pick" : ""}">
       <span class="pick-lane">${escapeHTML(player.lane.replace(" Lane", ""))}</span>
-      <span class="pick-hero">${escapeHTML(player.hero)}</span>
-      <span class="pick-player">${escapeHTML(player.player)}${player.mvp ? '<b class="pick-tag mvp-flag">MVP</b>' : ""}${player.firstBlood ? '<b class="pick-tag first-blood">FIRST BLOOD</b>' : ""}</span>
-      <span class="pick-kda">${player.kills}<i>K</i> ${player.deaths}<i>D</i> ${player.assists}<i>A</i></span>
-      <span class="pick-extra-stats">KP ${calculatePlayerKp(players, player)}% · ${Number(player.gold || 0).toLocaleString("en-US")} gold · ${Number(player.damage || 0).toLocaleString("en-US")} hero dmg · ${Number(player.damageTaken || 0).toLocaleString("en-US")} taken</span>
-      <span class="pick-multikills">${[1, 2, 3, 4, 5].map((count) => `${count}K ${player.multiKills?.[count] || 0}`).join(" · ")}</span>
-    </div>`).join("");
+      <span class="pick-identity"><span class="pick-player">${escapeHTML(player.player)}${player.mvp ? '<b class="pick-tag mvp-flag">MVP</b>' : ""}${player.firstBlood ? '<b class="pick-tag first-blood">FIRST BLOOD</b>' : ""}</span><span class="pick-hero">${escapeHTML(player.hero)}</span></span>
+      <span class="pick-kda"><b>${player.kills}</b><i>/</i><b>${player.deaths}</b><i>/</i><b>${player.assists}</b></span>
+      <span class="pick-extra-stats"><span><b>KP</b> ${calculatePlayerKp(players, player)}%</span><span><b>GOLD</b> ${Number(player.gold || 0).toLocaleString("en-US")}</span><span><b>HERO DMG</b> ${Number(player.damage || 0).toLocaleString("en-US")}</span><span><b>TAKEN</b> ${Number(player.damageTaken || 0).toLocaleString("en-US")}</span></span>
+      ${multikills ? `<span class="pick-multikills">${multikills}</span>` : ""}
+    </div>`;
+  }).join("");
   return `<section class="draft-side ${winner === teamName ? "winning-side" : ""}">
     <header class="draft-side-heading">
       <div><strong>${escapeHTML(teamName)}</strong><span>${winner === teamName ? "GAME WINNER" : "TEAM STATS"}</span></div>
@@ -2149,20 +1949,25 @@ function renderBroadcastGame(match, game) {
   return `<article class="game-card">
     ${renderGameHeader(match, game)}
     <div class="game-details" id="game-detail-${game.gameNumber}" ${collapsedGames.has(game.gameNumber) ? "hidden" : ""}>
-      <div class="game-bans">
-        <div class="ban-side"><span>BANNED</span><b>${escapeHTML(match.teamA)}</b>${game.bansA.map((hero) => `<i>${escapeHTML(hero)}</i>`).join("")}</div>
-        <div class="ban-side"><span>BANNED</span><b>${escapeHTML(match.teamB)}</b>${game.bansB.map((hero) => `<i>${escapeHTML(hero)}</i>`).join("")}</div>
-      </div>
+      <section class="game-bans-section">
+        <span class="game-section-label">BANNED HEROES</span>
+        <div class="game-bans">
+          <div class="ban-side"><b>${escapeHTML(match.teamA)}</b>${game.bansA.map((hero) => `<i>${escapeHTML(hero)}</i>`).join("")}</div>
+          <div class="ban-side"><b>${escapeHTML(match.teamB)}</b>${game.bansB.map((hero) => `<i>${escapeHTML(hero)}</i>`).join("")}</div>
+        </div>
+      </section>
+      <footer class="game-footer">
+        <span class="objective-label">OBJECTIVES TAKEN</span>
+        <div class="objective-grid">
+          <div class="objective-team"><strong>${escapeHTML(match.teamA)}</strong>${renderObjectiveSummary(game.objectivesA)}</div>
+          <div class="objective-team"><strong>${escapeHTML(match.teamB)}</strong>${renderObjectiveSummary(game.objectivesB)}</div>
+        </div>
+      </footer>
       <div class="draft-matchup">
         ${renderDraftSide(match.teamA, game.playersA, game.winner, "A", game.blueSide)}
         <div class="draft-divider"><span>VS</span></div>
         ${renderDraftSide(match.teamB, game.playersB, game.winner, "B", game.blueSide)}
       </div>
-      <footer class="game-footer">
-        <span class="objective-label">OBJECTIVES TAKEN</span>
-        <div class="objective-team"><strong>${escapeHTML(match.teamA)}</strong>${renderObjectiveSummary(game.objectivesA)}</div>
-        <div class="objective-team"><strong>${escapeHTML(match.teamB)}</strong>${renderObjectiveSummary(game.objectivesB)}</div>
-      </footer>
     </div>
   </article>`;
 }
@@ -2178,7 +1983,7 @@ function renderMatchDetails() {
   if (!match) return;
   const hasResult = match.finished && Number.isInteger(match.scoreA) && Number.isInteger(match.scoreB);
   detailModal.querySelector(".eyebrow").textContent = "MATCH BREAKDOWN";
-  const canEdit = productionMode ? !!productionDatabaseAdapter?.canWrite : hasAdminAccess;
+  const canEdit = !!productionDatabaseAdapter?.canWrite;
   const gamesMarkup = hasResult
     ? renderGameList(match)
     : `<div class="detail-empty">This match has not started yet. Game scores, drafts, and player stats will appear here after the result is recorded.</div>`;
@@ -2186,10 +1991,10 @@ function renderMatchDetails() {
   document.querySelector("#detail-content").innerHTML = `
     <div class="detail-summary">
       <div class="detail-team"><strong>${escapeHTML(match.teamA)}</strong><small>${hasResult ? (match.scoreA > match.scoreB ? "WIN" : "LOSE") : "TEAM A"}</small></div>
-      <div class="detail-score">${hasResult ? `<strong>${match.scoreA}</strong><span>:</span><strong>${match.scoreB}</strong>` : `<span class="upcoming-label">VS</span>`}<small class="match-status">${escapeHTML(match.status || (match.finished ? "Completed" : "Scheduled"))}</small></div>
+      <div class="detail-score"><div class="detail-score-main">${hasResult ? `<strong>${match.scoreA}</strong><span>:</span><strong>${match.scoreB}</strong>` : `<span class="upcoming-label">VS</span>`}</div><small class="match-status">${escapeHTML(match.status || (match.finished ? "Completed" : "Scheduled"))}</small></div>
       <div class="detail-team"><strong>${escapeHTML(match.teamB)}</strong><small>${hasResult ? (match.scoreB > match.scoreA ? "WIN" : "LOSE") : "TEAM B"}</small></div>
     </div>
-    <div class="detail-meta"><span>${escapeHTML(match.league)}</span><span>${escapeHTML(match.phase || "Stage")}: ${escapeHTML(match.stage)}</span><span>${escapeHTML(getMatchLocalDate(match))}${getMatchLocalTime(match) ? ` · ${escapeHTML(getMatchLocalTime(match))}` : ""}</span>${match.globalBanPick || tournamentSettings[match.league]?.globalBanPick ? "<span>GLOBAL BAN & PICK</span>" : ""}${match.streamUrl ? `<a class="stream-play-link" href="${escapeHTML(match.streamUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Watch live stream" title="Watch live stream">▶</a>` : ""}${canEdit ? `<button type="button" class="button button-secondary edit-match-button" data-edit-match="${escapeHTML(currentDetailMatchId)}">Edit match</button>` : ""}</div>
+    <div class="detail-meta"><span>${escapeHTML(match.league)}</span><span>${escapeHTML(match.phase || "Stage")}: ${escapeHTML(match.stage)}</span><span>${escapeHTML(getMatchLocalDate(match))}${getMatchLocalTime(match) ? ` · ${escapeHTML(getMatchLocalTime(match))}` : ""}</span>${match.globalBanPick || tournamentSettings[match.league]?.globalBanPick ? "<span>GLOBAL BAN & PICK</span>" : ""}${match.streamUrl ? `<a class="stream-play-link" href="${escapeHTML(match.streamUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open stream or replay" title="Open stream or replay"></a>` : ""}${canEdit ? `<button type="button" class="button button-secondary edit-match-button" data-edit-match="${escapeHTML(currentDetailMatchId)}">Edit match</button><button type="button" class="danger-button delete-match-button" data-delete-match="${escapeHTML(currentDetailMatchId)}">Delete match</button>` : ""}</div>
     ${gamesMarkup}`;
 }
 
@@ -2199,6 +2004,7 @@ function openMatchDetails(matchId) {
   currentDetailMatchId = matchId;
   collapsedGames.clear();
   renderMatchDetails();
+  detailModal.querySelector(".detail-modal").scrollTop = 0;
   detailModal.hidden = false;
   document.body.style.overflow = "hidden";
   detailModal.querySelector(".close-detail").focus();
@@ -2210,22 +2016,7 @@ function closeMatchDetails() {
 }
 
 function requestAdminAccess(afterUnlock = openModal) {
-  if (productionMode) {
-    if (!productionDatabaseAdapter?.canWrite) {
-      pendingAdminAction = afterUnlock;
-      adminAccessModal.hidden = false;
-      document.body.style.overflow = "hidden";
-      document.querySelector("#admin-password").focus();
-      return;
-    }
-    afterUnlock();
-    return;
-  }
-  if (isReadOnlyDatabase()) {
-    showToast("Supabase is connected in read-only mode. Database edits are disabled.");
-    return;
-  }
-  if (hasAdminAccess) {
+  if (productionDatabaseAdapter?.canWrite) {
     afterUnlock();
     return;
   }
@@ -2239,61 +2030,8 @@ navItems.forEach((item) => item.addEventListener("click", () => setPage(item.dat
 document.querySelectorAll(".close-modal").forEach((button) => button.addEventListener("click", closeModal));
 document.querySelectorAll(".close-admin-modal").forEach((button) => button.addEventListener("click", closeAdminAccess));
 document.querySelectorAll(".close-detail").forEach((button) => button.addEventListener("click", closeMatchDetails));
-document.querySelectorAll(".close-database-modal").forEach((button) => button.addEventListener("click", () => {
-  databaseModal.hidden = true;
-  databaseConnectionError.hidden = true;
-  document.body.style.overflow = "";
-}));
-document.querySelector("#connect-database-button").addEventListener("click", () => {
-  const savedConnection = sessionStorage.getItem(databaseSessionKey);
-  if (savedConnection) {
-    const config = JSON.parse(savedConnection);
-    document.querySelector("#database-project-url").value = config.url;
-    document.querySelector("#database-anon-key").value = config.anonKey;
-  }
-  databaseModal.hidden = false;
-  document.body.style.overflow = "hidden";
-  document.querySelector("#database-email").focus();
-});
-document.querySelector("#database-connect-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const submit = document.querySelector("#database-connect-submit");
-  submit.disabled = true;
-  submit.textContent = "Connecting…";
-  databaseConnectionError.hidden = true;
-  try {
-    await connectToDatabase(
-      document.querySelector("#database-project-url").value,
-      document.querySelector("#database-anon-key").value,
-      {
-        email: document.querySelector("#database-email").value,
-        password: document.querySelector("#database-password").value,
-      }
-    );
-    databaseModal.hidden = true;
-    document.body.style.overflow = "";
-    document.querySelector("#database-anon-key").value = "";
-    document.querySelector("#database-password").value = "";
-    showToast("Connected to Supabase with viewer access.");
-  } catch (error) {
-    databaseConnectionError.textContent = `Could not connect: ${error.message}`;
-    databaseConnectionError.hidden = false;
-    updateDatabaseConnectionButton(liveDataMode);
-  } finally {
-    submit.disabled = false;
-    submit.innerHTML = 'Sign in and connect <span>→</span>';
-  }
-});
 document.querySelector("#continue-to-entry").addEventListener("click", prepareEntryStepTwo);
-document.querySelector("#entry-status").addEventListener("change", (event) => {
-  document.querySelector("#continue-to-entry").innerHTML = event.target.value === "Scheduled"
-    ? `${editingMatchId || productionDatabaseAdapter?.canWrite ? "Save scheduled match" : "Preview scheduled match"} <span>→</span>`
-    : 'Continue to results <span>→</span>';
-  document.querySelector("#save-match-button").textContent = productionDatabaseAdapter?.canWrite
-    ? editingMatchId ? "Save match changes" : "Save completed match"
-    : "Preview result";
-});
-document.querySelector("#back-to-entry").addEventListener("click", () => showEntryStep(1));
+document.querySelectorAll(".save-schedule-button").forEach((button) => button.addEventListener("click", () => saveEntrySchedule(button)));
 document.querySelector("#entry-league").addEventListener("change", () => {
   const tournament = document.querySelector("#entry-league").value;
   syncEntryPhaseOptions(tournament);
@@ -2302,12 +2040,77 @@ document.querySelector("#entry-league").addEventListener("change", () => {
 document.querySelector("#entry-phase").addEventListener("change", () => {
   syncEntryStageOptions(document.querySelector("#entry-league").value);
 });
+document.querySelector("#entry-format").addEventListener("change", () => {
+  if (syncEntryGameDraftCount()) showToast("Game tabs adjusted to the selected match format.");
+});
+document.querySelector("#entry-stage").addEventListener("change", (event) => {
+  const customInput = document.querySelector("#entry-custom-stage");
+  customInput.hidden = event.target.value !== "__custom__";
+  customInput.required = !customInput.hidden;
+  if (!customInput.hidden) customInput.focus();
+});
 document.querySelector("#entry-game-tabs").addEventListener("click", (event) => {
   const tab = event.target.closest("[data-entry-game]");
   if (!tab) return;
   currentEntryGame = Number(tab.dataset.entryGame);
   renderEntryGameTabs();
   renderEntryGamePanel();
+});
+document.querySelector("#entry-game-panel").addEventListener("paste", (event) => {
+  const target = event.target.closest(".entry-stats-table input, .entry-stats-table select, .entry-ban-selects input, .entry-objective-team input");
+  if (!target) return;
+  const clipboardText = event.clipboardData?.getData("text/plain") || "";
+  if (!clipboardText.includes("\t") && !/[\r\n]/.test(clipboardText)) return;
+  const pastedRows = clipboardText.replace(/\r/g, "").split("\n");
+  if (pastedRows.at(-1) === "") pastedRows.pop();
+  const values = pastedRows.map((row) => row.split("\t"));
+  let editorRows;
+  let startRowIndex;
+  let startColumnIndex;
+  const table = target.closest(".entry-stats-table");
+  if (table) {
+    editorRows = [...table.querySelectorAll("tbody tr")].map((row) =>
+      [...row.querySelectorAll('input:not([type="hidden"]), select')]
+    );
+    const targetRow = target.closest("tr");
+    startRowIndex = [...table.querySelectorAll("tbody tr")].indexOf(targetRow);
+    startColumnIndex = editorRows[startRowIndex].indexOf(target);
+  } else {
+    const isObjective = !!target.closest(".entry-objective-team");
+    const section = target.closest(isObjective ? ".entry-objectives" : ".entry-bans-grid");
+    const rowSelector = isObjective ? ".entry-objective-team" : ".entry-ban-selects";
+    const editorGroups = [...section.querySelectorAll(rowSelector)];
+    editorRows = editorGroups.map((group) => [...group.querySelectorAll("input")]);
+    const targetGroup = target.closest(rowSelector);
+    startRowIndex = editorGroups.indexOf(targetGroup);
+    startColumnIndex = editorRows[startRowIndex].indexOf(target);
+  }
+  if (startRowIndex < 0 || startColumnIndex < 0) return;
+  event.preventDefault();
+  let pastedCellCount = 0;
+  let lastEditor = target;
+  values.forEach((rowValues, rowOffset) => {
+    const editors = editorRows[startRowIndex + rowOffset];
+    if (!editors) return;
+    rowValues.forEach((rawValue, columnOffset) => {
+      const editor = editors[startColumnIndex + columnOffset];
+      if (!editor) return;
+      const value = rawValue.trim();
+      if (editor.type === "radio" || editor.type === "checkbox") {
+        editor.checked = /^(1|true|yes|y|x|mvp|first blood)$/i.test(value);
+      } else if (editor.type === "number") {
+        editor.value = value.replace(/,/g, "");
+      } else {
+        editor.value = value;
+      }
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.dispatchEvent(new Event("change", { bubbles: true }));
+      pastedCellCount += 1;
+      lastEditor = editor;
+    });
+  });
+  lastEditor.focus({ preventScroll: true });
+  showToast(`${pastedCellCount} spreadsheet cells pasted.`);
 });
 document.querySelector("#entry-game-panel").addEventListener("input", (event) => {
   const input = event.target;
@@ -2317,36 +2120,26 @@ document.querySelector("#entry-game-panel").addEventListener("input", (event) =>
     if (input.dataset.entryField === "winner") updateEntrySeriesScore();
     return;
   }
-  if (input.dataset.entryField === "bans") {
-    game[`bans${input.dataset.entrySide}`] = input.value.split(",").map((hero) => hero.trim()).filter(Boolean);
+  if (input.dataset.entryBanIndex !== undefined) {
+    game[`bans${input.dataset.entrySide}`][Number(input.dataset.entryBanIndex)] = input.value;
     return;
   }
   if (input.dataset.entryPick) {
     const side = input.dataset.entrySide;
     const laneIndex = Number(input.dataset.entryLane);
-    if (input.dataset.entryPick === "kda") {
-      const values = input.value.match(/^(\d+)\/(\d+)\/(\d+)$/);
-      if (values) {
-        ["kills", "deaths", "assists"].forEach((stat, index) => {
-          game[`picks${side}`][laneIndex][stat] = Number(values[index + 1]);
-        });
-        input.setCustomValidity("");
-        document.querySelector(`[data-entry-kp="${side}-${laneIndex}"]`).textContent = `${calculateEntryKp(game, side, laneIndex)}%`;
-      } else {
-        input.setCustomValidity("Enter K/D/A as three non-negative whole numbers, for example 4/2/7.");
-      }
-      return;
-    }
     const pick = game[`picks${side}`][laneIndex];
-    if (input.dataset.entryPick === "playerId") {
-      pick.playerId = input.value;
-      pick.player = getTeamRoster(document.querySelector("#entry-league").value, selectedTeamNames()[side === "A" ? "teamA" : "teamB"])
-        .find((member) => member.id === input.value)?.name || "";
+    if (input.dataset.entryPick === "player") {
+      const team = selectedTeamNames()[side === "A" ? "teamA" : "teamB"];
+      const typedName = input.value.trim();
+      const rosterMember = getTeamRoster(document.querySelector("#entry-league").value, team)
+        .find((member) => member.role === pick.lane && member.name.toLowerCase() === typedName.toLowerCase());
+      pick.player = input.value;
+      pick.playerId = rosterMember?.id || "";
     } else {
       pick[input.dataset.entryPick] = input.type === "number" ? Number(input.value) : input.value;
     }
     if (["kills", "assists"].includes(input.dataset.entryPick)) {
-      document.querySelector(`[data-entry-kp="${side}-${laneIndex}"]`).textContent = `${calculateEntryKp(game, side, laneIndex)}%`;
+      refreshEntryKpCells(game, side);
     }
   }
   if (input.dataset.entryMultiKill) {
@@ -2362,26 +2155,11 @@ document.querySelector("#entry-game-panel").addEventListener("input", (event) =>
 });
 document.querySelector("#entry-game-panel").addEventListener("change", (event) => {
   if (event.target.dataset.entryField === "winner") updateEntrySeriesScore();
-  if (event.target.dataset.entryPick === "playerId") {
-    const side = event.target.dataset.entrySide;
-    const laneIndex = Number(event.target.dataset.entryLane);
-    const playerId = event.target.value;
-    const team = selectedTeamNames()[side === "A" ? "teamA" : "teamB"];
-    const player = getTeamRoster(document.querySelector("#entry-league").value, team).find((member) => member.id === playerId);
-    entryGameDrafts[currentEntryGame - 1][`picks${side}`][laneIndex].playerId = playerId;
-    entryGameDrafts[currentEntryGame - 1][`picks${side}`][laneIndex].player = player?.name || "";
-  }
   if (event.target.dataset.entryAward && event.target.checked) {
     const { entrySide, entryLane, entryAward } = event.target.dataset;
     ["A", "B"].forEach((side) => entryGameDrafts[currentEntryGame - 1][`picks${side}`].forEach((player, index) => {
       player[entryAward] = side === entrySide && index === Number(entryLane);
     }));
-  }
-  if (event.target.dataset.entryPick === "hero") {
-    const side = event.target.dataset.entrySide;
-    const laneIndex = Number(event.target.dataset.entryLane);
-    entryGameDrafts[currentEntryGame - 1][`picks${side}`][laneIndex].hero = event.target.value;
-    renderEntryGamePanel();
   }
 });
 document.querySelector("#entry-game-panel").addEventListener("click", (event) => {
@@ -2404,6 +2182,21 @@ detailModal.addEventListener("click", (event) => {
     const matchId = editMatchButton.dataset.editMatch;
     closeMatchDetails();
     openModal(matchId);
+    return;
+  }
+  const deleteMatchButton = event.target.closest("[data-delete-match]");
+  if (deleteMatchButton) {
+    const matchId = deleteMatchButton.dataset.deleteMatch;
+    const match = matchDetails[matchId];
+    if (!match || !window.confirm(`Delete ${match.teamA} vs ${match.teamB}? This cannot be undone.`)) return;
+    deleteMatchButton.disabled = true;
+    productionDatabaseAdapter.deleteMatch(matchId).then(async () => {
+      closeMatchDetails();
+      await finishDatabaseWrite("Match deleted from Supabase.");
+    }).catch(async (error) => {
+      deleteMatchButton.disabled = false;
+      await showDatabaseWriteError("Match deletion", error);
+    });
     return;
   }
   const allGamesButton = event.target.closest("[data-games-action]");
@@ -2434,11 +2227,6 @@ detailModal.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (!detailModal.hidden) closeMatchDetails();
-    else if (!databaseModal.hidden) {
-      databaseModal.hidden = true;
-      databaseConnectionError.hidden = true;
-      document.body.style.overflow = "";
-    }
     else if (!modal.hidden) closeModal();
     else if (!adminAccessModal.hidden) closeAdminAccess();
   }
@@ -2448,125 +2236,76 @@ document.querySelector("#access-form").addEventListener("submit", async (event) 
   const passwordInput = document.querySelector("#access-password");
   const submitButton = event.currentTarget.querySelector("button[type='submit']");
   const accessError = document.querySelector("#access-error");
-  if (productionMode) {
-    submitButton.disabled = true;
-    accessError.hidden = true;
-    try {
-      const isAdmin = await productionDatabaseAdapter.signIn(passwordInput.value);
-      if (isAdmin) {
-        await productionDatabaseAdapter.signOut();
-        throw new Error("Use the Admin button after signing in with the viewer password.");
-      }
-      productionDatabaseAdapter.canWrite = false;
-      await refreshProductionData();
-      accessGate.hidden = true;
-      appShell.hidden = false;
-      updateAdminControls();
-      passwordInput.value = "";
-    } catch (error) {
-      accessError.textContent = `Could not sign in: ${error.message}`;
-      accessError.hidden = false;
-    } finally {
-      submitButton.disabled = false;
-    }
-    return;
-  }
-  if (!previewViewerPassword || passwordInput.value !== previewViewerPassword) {
-    accessError.hidden = false;
-    passwordInput.select();
-    return;
-  }
   submitButton.disabled = true;
-  accessGate.hidden = true;
-  appShell.hidden = false;
-  updateAdminControls();
   accessError.hidden = true;
-  passwordInput.value = "";
-  submitButton.disabled = false;
-  const savedConnection = sessionStorage.getItem(databaseSessionKey);
-  if (savedConnection) {
-    try {
-      const { url, anonKey, accessToken, refreshToken } = JSON.parse(savedConnection);
-      connectToDatabase(url, anonKey, { accessToken, refreshToken }).catch((error) => {
-        updateDatabaseConnectionButton(false);
-        showToast(`Could not restore Supabase connection: ${error.message}`);
-      });
-    } catch (error) {
-      sessionStorage.removeItem(databaseSessionKey);
-      showToast(`Saved Supabase session is invalid: ${error.message}`);
+  try {
+    const isAdmin = await productionDatabaseAdapter.signIn(passwordInput.value);
+    if (isAdmin) {
+      await productionDatabaseAdapter.signOut();
+      throw new Error("Use the Admin button after signing in with the viewer password.");
     }
+    productionDatabaseAdapter.canWrite = false;
+    await refreshProductionData();
+    accessGate.hidden = true;
+    appShell.hidden = false;
+    updateAdminControls();
+    startRealtimeRefresh();
+    passwordInput.value = "";
+  } catch (error) {
+    accessError.textContent = `Could not sign in: ${error.message}`;
+    accessError.hidden = false;
+  } finally {
+    submitButton.disabled = false;
   }
 });
 document.querySelector("#admin-access-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const passwordInput = document.querySelector("#admin-password");
-  if (productionMode) {
-    const submitButton = event.currentTarget.querySelector("button[type='submit']");
-    submitButton.disabled = true;
-    const errorMessage = document.querySelector("#admin-access-error");
-    errorMessage.hidden = true;
-    try {
-      const isAdmin = await productionDatabaseAdapter.signInAdmin(passwordInput.value);
-      if (!isAdmin) {
-        errorMessage.textContent = "Incorrect admin password. Try again.";
-        errorMessage.hidden = false;
-        passwordInput.select();
-        return;
-      }
-      productionDatabaseAdapter.canWrite = true;
-      hasAdminAccess = true;
-      updateAdminControls();
-      await refreshProductionData();
-      const action = pendingAdminAction || openModal;
-      pendingAdminAction = null;
-      closeAdminAccess();
-      action();
-    } catch (error) {
-      errorMessage.textContent = `Could not verify admin access: ${error.message}`;
+  const submitButton = event.currentTarget.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  const errorMessage = document.querySelector("#admin-access-error");
+  errorMessage.hidden = true;
+  try {
+    const isAdmin = await productionDatabaseAdapter.signInAdmin(passwordInput.value);
+    if (!isAdmin) {
+      errorMessage.textContent = "Incorrect admin password. Try again.";
       errorMessage.hidden = false;
-    } finally {
-      submitButton.disabled = false;
+      passwordInput.select();
+      return;
     }
-    return;
+    productionDatabaseAdapter.canWrite = true;
+    updateAdminControls();
+    await refreshProductionData();
+    const action = pendingAdminAction || openModal;
+    pendingAdminAction = null;
+    closeAdminAccess();
+    action();
+  } catch (error) {
+    errorMessage.textContent = `Could not verify admin access: ${error.message}`;
+    errorMessage.hidden = false;
+  } finally {
+    submitButton.disabled = false;
   }
-  if (!previewAdminPassword || passwordInput.value !== previewAdminPassword) {
-    document.querySelector("#admin-access-error").hidden = false;
-    passwordInput.select();
-    return;
-  }
-  hasAdminAccess = true;
-  updateAdminControls();
-  const action = pendingAdminAction || openModal;
-  pendingAdminAction = null;
-  closeAdminAccess();
-  action();
 });
 document.querySelector("#sign-out-button").addEventListener("click", () => {
-  if (productionMode) {
-    productionDatabaseAdapter.signOut().then(() => {
-      productionDatabaseAdapter.canWrite = false;
-      hasAdminAccess = false;
-      updateAdminControls();
-      sessionStorage.removeItem(databaseSessionKey);
-      appShell.hidden = true;
-      accessGate.hidden = false;
-      document.body.style.overflow = "";
-      document.querySelector("#access-form").reset();
-      document.querySelector("#access-error").hidden = true;
-    }).catch((error) => showToast(`Could not sign out: ${error.message}`));
-    return;
-  }
-  hasAdminAccess = false;
-  updateAdminControls();
-  sessionStorage.removeItem(databaseSessionKey);
-  appShell.hidden = true;
-  accessGate.hidden = false;
-  document.body.style.overflow = "";
-  document.querySelector("#access-form").reset();
-  document.querySelector("#access-error").hidden = true;
+  productionDatabaseAdapter.signOut().then(() => {
+    stopRealtimeRefresh();
+    productionDatabaseAdapter.canWrite = false;
+    matchDetails = {};
+    tournamentSettings = {};
+    leagueTeams = {};
+    leagueOptions = [];
+    teamRosters.clear();
+    updateAdminControls();
+    appShell.hidden = true;
+    accessGate.hidden = false;
+    document.body.style.overflow = "";
+    document.querySelector("#access-form").reset();
+    document.querySelector("#access-error").hidden = true;
+  }).catch((error) => showToast(`Could not sign out: ${error.message}`));
 });
 document.querySelector("#admin-toggle-button").addEventListener("click", () => {
-  const canEdit = productionMode ? !!productionDatabaseAdapter?.canWrite : hasAdminAccess;
+  const canEdit = !!productionDatabaseAdapter?.canWrite;
   if (canEdit) {
     showToast("Admin access is active for this session.");
     return;
@@ -2575,9 +2314,14 @@ document.querySelector("#admin-toggle-button").addEventListener("click", () => {
 });
 document.querySelector("#match-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  syncEntryGameDraftCount();
   const previewMatch = buildEntryPreviewMatch();
   if (previewMatch.streamUrl && !/^https?:\/\//i.test(previewMatch.streamUrl)) {
     showToast("Use an http or https link for the live stream.");
+    return;
+  }
+  if (previewMatch.games.some((game) => [...game.playersA, ...game.playersB].some((player) => !player.hero.trim()))) {
+    showToast("Enter a hero for every player before saving the result.");
     return;
   }
   if (previewMatch.globalBanPick) {
@@ -2595,8 +2339,18 @@ document.querySelector("#match-form").addEventListener("submit", async (event) =
       }
     }
   }
-  if (previewMatch.games.some((game) => [...game.playersA, ...game.playersB].some((player) => !player.playerId))) {
-    showToast("Register all five active-role players for both teams before entering match stats.");
+  for (const game of previewMatch.games) {
+    for (const side of ["A", "B"]) {
+      const team = side === "A" ? previewMatch.teamA : previewMatch.teamB;
+      const bans = game[`bans${side}`];
+      if (bans.length !== 4 || new Set(bans).size !== 4) {
+        showToast(`Choose four different banned heroes for ${team} in Game ${game.gameNumber}.`);
+        return;
+      }
+    }
+  }
+  if (previewMatch.games.some((game) => [...game.playersA, ...game.playersB].some((player) => !player.player.trim()))) {
+    showToast("Enter all five player names for both teams before saving the result.");
     return;
   }
   if (!previewMatch.games.length || previewMatch.scoreA === previewMatch.scoreB) {
@@ -2621,24 +2375,17 @@ document.querySelector("#match-form").addEventListener("submit", async (event) =
     showToast("Remove game results after the series is decided.");
     return;
   }
-  if (productionDatabaseAdapter?.canWrite) {
-    const saveButton = document.querySelector("#save-match-button");
-    saveButton.disabled = true;
-    try {
-      await productionDatabaseAdapter.saveMatch(previewMatch, editingMatchId);
-      closeModal();
-      await finishDatabaseWrite("Match result and game stats saved to Supabase.");
-    } catch (error) {
-      showToast(`Match was not saved: ${error.message}`);
-    } finally {
-      saveButton.disabled = false;
-    }
-    return;
+  const saveButton = document.querySelector("#save-match-button");
+  saveButton.disabled = true;
+  try {
+    await productionDatabaseAdapter.saveMatch(previewMatch, editingMatchId);
+    closeModal();
+    await finishDatabaseWrite("Match result and game stats saved to Supabase.");
+  } catch (error) {
+    showToast(`Match was not saved: ${error.message}`);
+  } finally {
+    saveButton.disabled = false;
   }
-  matchDetails["entry-preview"] = previewMatch;
-  closeModal();
-  openMatchDetails("entry-preview");
-  showToast("Sample result preview only — nothing was saved.");
 });
 function setTheme(isDark, notify = false) {
   document.body.classList.toggle("dark-mode", isDark);
@@ -2654,4 +2401,11 @@ setTheme(localStorage.getItem(themeStorageKey) === "dark");
 document.querySelector("#theme-button").addEventListener("click", toggleTheme);
 document.querySelector("#gate-theme-button").addEventListener("click", toggleTheme);
 
-bindMatchPage();
+document.addEventListener("visibilitychange", () => {
+  if (canRefreshRealtimeData()) refreshProductionData().catch(() => {});
+});
+
+window.addEventListener("focus", () => {
+  if (canRefreshRealtimeData()) refreshProductionData().catch(() => {});
+});
+
